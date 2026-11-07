@@ -13,10 +13,13 @@ from urllib.parse import parse_qs, urlsplit
 import xlrd
 from defusedxml.ElementTree import fromstring
 from openpyxl import load_workbook
+from openpyxl.utils.cell import range_boundaries
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 10 * 1024 * 1024
 HEADERS = ("product name", "product model", "qty", "colour")
+OPTIONAL_HEADERS = ("box number", "barcode")
+IGNORED_HEADERS = {"product image", "w price"}
 EXTENSIONS = (".xlsx", ".xls", ".xl", ".ods")
 ODS_NS = {
     "office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
@@ -42,17 +45,53 @@ def positive_int(value, field):
     return number
 
 
+def sheet_one(names):
+    for name in names:
+        if key(name).replace(" ", "") == "sheet1":
+            return name
+    raise ValueError('The workbook needs a worksheet named "Sheet 1" or "Sheet1".')
+
+
+def spreadsheet_text(value):
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return "" if value is None else str(value).strip()
+
+
+def merged_rows(rows, ranges):
+    spans = {}
+    for start, end, column in ranges:
+        if end > start:
+            spans.setdefault(start, []).append((end, column))
+    active = {}
+    for index, original in enumerate(rows):
+        row = list(original)
+        active = {column: span for column, span in active.items() if span[0] > index}
+        for column, (_, value) in active.items():
+            if column >= len(row):
+                row.extend([None] * (column + 1 - len(row)))
+            row[column] = value
+        for end, column in spans.get(index, ()):
+            if column < len(row):
+                active[column] = (end, row[column])
+        yield row
+
+
 def read_rows(rows):
     rows = iter(rows)
     for row in rows:
         if any(label(cell) for cell in row):
-            headers = tuple(map(key, row))
+            labels = [spreadsheet_text(cell) for cell in row]
+            headers = ["product model" if key(cell) == "model" else key(cell) for cell in labels]
             break
     else:
-        raise ValueError("The first worksheet is empty.")
+        raise ValueError("Sheet 1 is empty.")
     if any(headers.count(header) != 1 for header in HEADERS):
-        raise ValueError("The first worksheet needs one column each for Product Name, Product Model, QTY and Colour.")
+        raise ValueError("Sheet 1 needs one column each for Product Name, Product Model, QTY and Colour.")
     indexes = [headers.index(header) for header in HEADERS]
+    optional = {header: headers.index(header) for header in OPTIONAL_HEADERS if header in headers}
+    extras = [(i, labels[i]) for i, header in enumerate(headers)
+              if header and header not in (*HEADERS, *OPTIONAL_HEADERS) and header not in IGNORED_HEADERS]
     items = {}
     for row_number, row in enumerate(rows, 2):
         if row_number > 50_001:
@@ -64,11 +103,16 @@ def read_rows(rows):
         if not all(names):
             raise ValueError(f"Data row {row_number - 1} needs a product name, model and colour.")
         quantity = positive_int(qty, f"QTY on data row {row_number - 1}")
-        identity = tuple(map(key, names))
+        def value_at(index):
+            return spreadsheet_text(row[index]) if 0 <= index < len(row) else ""
+
+        box, barcode = (value_at(optional.get(header, -1)) for header in OPTIONAL_HEADERS)
+        details = json.dumps({heading: value_at(index) for index, heading in extras})
+        identity = (*map(key, names), box, barcode, details)
         previous = items.get(identity)
         items[identity] = (*previous[:3], previous[3] + quantity) if previous else (*names, quantity)
     if not items:
-        raise ValueError("The first worksheet contains no delivery items.")
+        raise ValueError("Sheet 1 contains no delivery items.")
     return items
 
 
@@ -78,11 +122,13 @@ def ods_tag(namespace, name):
 
 def ods_rows(content):
     root = fromstring(content)
-    sheet = root.find("office:body/office:spreadsheet/table:table", ODS_NS)
-    if sheet is None:
-        raise ValueError("The ODS workbook has no worksheets.")
+    sheets = {sheet.get(ods_tag("table", "name"), ""): sheet
+              for sheet in root.findall("office:body/office:spreadsheet/table:table", ODS_NS)}
+    sheet = sheets[sheet_one(sheets)]
+    active = {}
     for row in sheet.iter(ods_tag("table", "table-row")):
         values = []
+        spans = {}
         for cell in row:
             if cell.tag not in (ods_tag("table", "table-cell"), ods_tag("table", "covered-table-cell")):
                 continue
@@ -92,15 +138,27 @@ def ods_rows(content):
             if value is None:
                 value = " ".join("".join(p.itertext()) for p in cell.findall("text:p", ODS_NS))
             copies = int(cell.get(ods_tag("table", "number-columns-repeated"), "1"))
-            values.extend([value] * min(copies, 16_384 - len(values)))
+            copies = min(copies, 16_384 - len(values))
+            span = int(cell.get(ods_tag("table", "number-rows-spanned"), "1"))
+            if span > 1:
+                for column in range(len(values), len(values) + copies):
+                    spans[column] = (span, value)
+            values.extend([value] * copies)
             if len(values) == 16_384:
                 break
         repeats = int(row.get(ods_tag("table", "number-rows-repeated"), "1"))
-        if not any(values):
+        if not any(values) and not active and not spans:
             yield []
             continue
         for _ in range(min(repeats, 50_002)):
-            yield values
+            active.update(spans)
+            expanded = values.copy()
+            for column, (_, value) in active.items():
+                if column < len(expanded):
+                    expanded[column] = value
+            yield expanded
+            active = {column: (remaining - 1, value) for column, (remaining, value) in active.items()
+                      if remaining > 1}
 
 
 def read_workbook(data, extension):
@@ -108,10 +166,12 @@ def read_workbook(data, extension):
         if extension == ".xl":
             extension = ".xlsx" if zipfile.is_zipfile(io.BytesIO(data)) else ".xls"
         if extension == ".xls":
-            workbook = xlrd.open_workbook(file_contents=data, on_demand=True)
+            workbook = xlrd.open_workbook(file_contents=data, on_demand=True, formatting_info=True)
             try:
-                sheet = workbook.sheet_by_index(0)
-                return read_rows(sheet.row_values(i) for i in range(sheet.nrows))
+                sheet = workbook.sheet_by_name(sheet_one(workbook.sheet_names()))
+                rows = (sheet.row_values(i) for i in range(sheet.nrows))
+                spans = ((start, end, col) for start, end, col, _ in sheet.merged_cells)
+                return read_rows(merged_rows(rows, spans))
             finally:
                 workbook.release_resources()
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
@@ -119,17 +179,23 @@ def read_workbook(data, extension):
                 raise ValueError("The workbook is too large once expanded.")
             if extension == ".ods":
                 return read_rows(ods_rows(archive.read("content.xml")))
-        workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
-        try:
-            sheet = workbook.worksheets[0]
-            sheet.reset_dimensions()
-            return read_rows(sheet.iter_rows(values_only=True))
-        finally:
-            workbook.close()
+            workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True, keep_links=False)
+            try:
+                sheet = workbook[sheet_one(workbook.sheetnames)]
+                sheet.reset_dimensions()
+                # Read-only worksheets stream cells but do not expose merged ranges.
+                root = fromstring(archive.read(sheet._worksheet_path))
+                spans = []
+                for cell in root.findall("./{*}mergeCells/{*}mergeCell"):
+                    col, start, _, end = range_boundaries(cell.attrib["ref"])
+                    spans.append((start - 1, end, col - 1))
+                return read_rows(merged_rows(sheet.iter_rows(values_only=True), spans))
+            finally:
+                workbook.close()
     except ValueError:
         raise
     except Exception as error:
-        raise ValueError("Could not read the first worksheet. Check that this is a valid Excel workbook.") from error
+        raise ValueError("Could not read Sheet 1. Check that this is a valid Excel workbook.") from error
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -158,13 +224,13 @@ class Handler(BaseHTTPRequestHandler):
             with sqlite3.connect(self.server.database) as db:
                 db.row_factory = sqlite3.Row
                 rows = db.execute("""
-                    SELECT d.id, d.arrival, d.boxes, p.name, p.model, p.colour, i.qty
-                    FROM items i JOIN deliveries d ON d.id = i.delivery
+                    SELECT d.id, d.arrival, d.boxes, p.name, p.model, p.colour, i.qty, i.box_number, i.barcode, i.details
+                    FROM delivery_lines i JOIN deliveries d ON d.id = i.delivery
                     JOIN products p ON p.id = i.product
                     WHERE instr(p.name_key, ?) > 0 AND instr(p.colour_key, ?) > 0
                     ORDER BY d.arrival DESC, d.id DESC, p.name_key, p.model_key, p.colour_key
                 """, terms).fetchall()
-            self.json(200, {"rows": [dict(row) for row in rows], "total": sum(row["qty"] for row in rows)})
+            self.json(200, {"rows": [dict(row) | {"details": json.loads(row["details"])} for row in rows], "total": sum(row["qty"] for row in rows)})
         else:
             self.json(404, {"error": "Page not found."})
 
@@ -199,14 +265,15 @@ class Handler(BaseHTTPRequestHandler):
             with sqlite3.connect(self.server.database) as db:
                 delivery = db.execute("INSERT INTO deliveries(arrival, boxes) VALUES (?, ?)", (arrival, boxes)).lastrowid
                 for identity, (name, model, colour, qty) in items.items():
+                    *product, box, barcode, details = identity
                     db.execute("""
                         INSERT INTO products(name_key, model_key, colour_key, name, model, colour)
                         VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(name_key, model_key, colour_key) DO NOTHING
-                    """, (*identity, name, model, colour))
+                    """, (*product, name, model, colour))
                     db.execute("""
-                        INSERT INTO items(delivery, product, qty)
-                        SELECT ?, id, ? FROM products WHERE name_key=? AND model_key=? AND colour_key=?
-                    """, (delivery, qty, *identity))
+                        INSERT INTO delivery_lines(delivery, product, qty, box_number, barcode, details)
+                        SELECT ?, id, ?, ?, ?, ? FROM products WHERE name_key=? AND model_key=? AND colour_key=?
+                    """, (delivery, qty, box, barcode, details, *product))
             self.json(201, {"items": len(items), "qty": sum(item[3] for item in items.values())})
         except ValueError as error:
             self.json(400, {"error": str(error)})
@@ -233,12 +300,17 @@ def main():
                 colour_key TEXT NOT NULL, name TEXT NOT NULL, model TEXT NOT NULL,
                 colour TEXT NOT NULL, UNIQUE(name_key, model_key, colour_key)
             );
-            CREATE TABLE IF NOT EXISTS items (
+            CREATE TABLE IF NOT EXISTS delivery_lines (
                 delivery INTEGER NOT NULL REFERENCES deliveries(id),
                 product INTEGER NOT NULL REFERENCES products(id),
-                qty INTEGER NOT NULL, PRIMARY KEY(delivery, product)
+                qty INTEGER NOT NULL, box_number TEXT NOT NULL DEFAULT '',
+                barcode TEXT NOT NULL DEFAULT '', details TEXT NOT NULL DEFAULT '{}'
             );
         """)
+        db.execute("BEGIN IMMEDIATE")
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='items'").fetchone():
+            db.execute("INSERT INTO delivery_lines(delivery, product, qty) SELECT delivery, product, qty FROM items")
+            db.execute("DROP TABLE items")
     with ThreadingHTTPServer((args.host, args.port), Handler) as server:
         server.database = args.database
         print(f"Delivery Count is listening on {args.host}:{args.port}", flush=True)

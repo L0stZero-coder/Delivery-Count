@@ -18,17 +18,29 @@ async function showHistory() {
         if (!response.ok) throw new Error();
         const { rows, total } = await response.json();
         if (search.signal.aborted) return;
+        const headings = [...new Set(rows.flatMap((row) => Object.keys(row.details)))];
+        const header = byId('history-head');
+        header.querySelectorAll('.extra-heading').forEach((cell) => cell.remove());
+        for (const heading of headings) {
+            const cell = document.createElement('th');
+            cell.className = 'extra-heading';
+            cell.textContent = heading;
+            header.insertBefore(cell, header.lastElementChild);
+        }
+        byId('total-label').colSpan = header.cells.length - 1;
         const fragment = document.createDocumentFragment();
         for (const row of rows) {
             const tr = document.createElement('tr');
             const values = [
                 date.format(new Date(row.arrival)), '#' + row.id, row.name, row.model,
-                row.colour, number.format(row.boxes), number.format(row.qty),
+                row.colour, number.format(row.boxes), row.box_number || '—', row.barcode || '—',
+                ...headings.map((heading) => Object.hasOwn(row.details, heading) ? row.details[heading] : ''),
+                number.format(row.qty),
             ];
             values.forEach((value, index) => {
                 const cell = tr.insertCell();
                 cell.textContent = value;
-                if (index >= 5) cell.className = 'num';
+                if (index === 5 || index === values.length - 1) cell.className = 'num';
             });
             fragment.append(tr);
         }
