@@ -199,6 +199,31 @@ def read_workbook(data, extension):
         raise ValueError("Could not read Sheet 1. Check that this is a valid Excel workbook.") from error
 
 
+def grouped_history(rows):
+    groups = {}
+    for row in rows:
+        identity = (row["id"], row["product_id"])
+        if identity not in groups:
+            groups[identity] = {
+                field: row[field] for field in ("id", "arrival", "boxes", "name", "model", "colour")
+            } | {"qty": 0, "box_number": {}, "barcode": {}, "details": {}}
+        group = groups[identity]
+        group["qty"] += row["qty"]
+        for field in ("box_number", "barcode"):
+            if row[field]:
+                group[field][row[field]] = None
+        for heading, value in json.loads(row["details"]).items():
+            values = group["details"].setdefault(heading, {})
+            if value:
+                values[value] = None
+
+    for group in groups.values():
+        for field in ("box_number", "barcode"):
+            group[field] = ", ".join(group[field])
+        group["details"] = {heading: ", ".join(values) for heading, values in group["details"].items()}
+    return list(groups.values())
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         if sys.stderr is not None:
@@ -229,13 +254,14 @@ class Handler(BaseHTTPRequestHandler):
             with sqlite3.connect(self.server.database) as db:
                 db.row_factory = sqlite3.Row
                 rows = db.execute("""
-                    SELECT d.id, d.arrival, d.boxes, p.name, p.model, p.colour, i.qty, i.box_number, i.barcode, i.details
+                    SELECT d.id, d.arrival, d.boxes, p.id AS product_id, p.name, p.model, p.colour, i.qty, i.box_number, i.barcode, i.details
                     FROM delivery_lines i JOIN deliveries d ON d.id = i.delivery
                     JOIN products p ON p.id = i.product
                     WHERE instr(p.name_key, ?) > 0 AND instr(p.colour_key, ?) > 0
-                    ORDER BY d.arrival DESC, d.id DESC, p.name_key, p.model_key, p.colour_key
+                    ORDER BY d.arrival DESC, d.id DESC, p.name_key, p.model_key, p.colour_key, i.rowid
                 """, terms).fetchall()
-            self.json(200, {"rows": [dict(row) | {"details": json.loads(row["details"])} for row in rows], "total": sum(row["qty"] for row in rows)})
+            rows = grouped_history(rows)
+            self.json(200, {"rows": rows, "total": sum(row["qty"] for row in rows)})
         else:
             self.json(404, {"error": "Page not found."})
 
