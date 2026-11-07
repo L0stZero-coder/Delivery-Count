@@ -108,7 +108,18 @@ async function showHistory() {
             selection.append(checkbox);
             reportValues(row, true).forEach((value, index) => {
                 const cell = tr.insertCell();
-                cell.textContent = value === '' ? '—' : value;
+                if (index === 5 && row.box_quantities.length) {
+                    const list = document.createElement('ul');
+                    list.className = 'box-list';
+                    for (const [box, qty] of row.box_quantities) {
+                        const item = document.createElement('li');
+                        item.textContent = box + ' (' + number.format(qty) + ')';
+                        list.append(item);
+                    }
+                    cell.append(list);
+                } else {
+                    cell.textContent = value === '' ? '—' : value;
+                }
                 if (index === 1 || index === 7) cell.className = 'num';
             });
             fragment.append(tr);
