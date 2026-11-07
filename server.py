@@ -3,6 +3,7 @@ import io
 import json
 import re
 import sqlite3
+import sys
 import unicodedata
 import zipfile
 from datetime import date
@@ -199,6 +200,10 @@ def read_workbook(data, extension):
 
 
 class Handler(BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        if sys.stderr is not None:
+            super().log_message(format, *args)
+
     def reply(self, status, content, mime):
         self.send_response(status)
         self.send_header("Content-Type", mime)
