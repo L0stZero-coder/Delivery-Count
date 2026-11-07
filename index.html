@@ -34,15 +34,21 @@
 <label>Colour<input id="colour-filter" type="search" placeholder="e.g. Black"></label>
 <button id="clear" class="secondary">Clear filters</button>
 </div>
+<div class="report-actions">
+<button id="export" type="button">Download CSV</button>
+<button id="clear-selection" type="button" class="secondary" hidden>Clear selection</button>
+<span id="selection-status" role="status">No selection · CSV includes all deliveries</span>
+</div>
+<p id="report-status" role="status"></p>
 <p id="history-status" role="status">Loading delivery history…</p>
 <div class="table-scroll" tabindex="0" aria-label="Delivery history table">
 <table>
-<thead><tr id="history-head"><th>Arrival date</th><th>Delivery</th><th>Product name</th><th>Product model</th><th>Colour</th><th class="num">Delivery boxes</th><th>Box numbers</th><th>Barcode</th><th class="num">QTY</th></tr></thead>
+<thead><tr><th scope="col">Select</th><th scope="col">Arrival Date</th><th scope="col" class="num">Delivery Boxes</th><th scope="col">Product Model</th><th scope="col">Product Name</th><th scope="col">Colour</th><th scope="col">Box Number + Qty in that Box</th><th scope="col">Barcode</th><th scope="col" class="num">Total QTY</th></tr></thead>
 <tbody id="rows"></tbody>
-<tfoot><tr><th id="total-label" colspan="8" scope="row">Total quantity</th><td id="total" class="num">—</td></tr></tfoot>
+<tfoot><tr><th colspan="8" scope="row">Total quantity</th><td id="total" class="num">—</td></tr></tfoot>
 </table>
 </div>
-<p class="note">Delivery boxes is the total for the shipment. Box numbers list every box containing that product in the delivery. Items with the same delivery number arrived together.</p>
+<p class="note">Delivery Boxes is the total for the shipment. Scroll the table sideways to see more columns on a narrow screen.</p>
 </section>
 </main>
 </body>

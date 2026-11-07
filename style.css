@@ -1,7 +1,7 @@
 * { box-sizing: border-box; }
 :root { color-scheme: light; font-family: system-ui, sans-serif; color: #172b34; background: #f3f7f7; }
 body { margin: 0; }
-.wrap { width: min(1140px, calc(100% - 2rem)); margin-inline: auto; }
+.wrap { width: calc(100% - 2rem); margin-inline: auto; }
 header { background: #12313b; color: #fff; }
 header .wrap { min-height: 66px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .brand { font-weight: 750; font-size: 1.1rem; }
@@ -31,8 +31,13 @@ button.secondary:hover { background: #d3e8e3; }
 .error { color: #a62927; }
 .success { color: #116758; }
 .table-scroll { overflow-x: auto; border: 1px solid #d8e4e6; border-radius: 8px; }
-table { border-collapse: collapse; width: 100%; text-align: left; min-width: 690px; }
-th, td { padding: .68rem .75rem; }
+table { border-collapse: collapse; width: 100%; text-align: left; min-width: max-content; }
+th, td { padding: .68rem .75rem; white-space: nowrap; }
+.report-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1rem; }
+#selection-status { font-size: .88rem; }
+#report-status:empty { display: none; }
+td input[type="checkbox"] { width: 1.2rem; height: 1.2rem; min-height: 0; margin: 0; vertical-align: middle; cursor: pointer; }
+tbody tr:has(input:checked) { background: #e3f2ee; }
 thead { background: #eef4f4; font-size: .8rem; }
 tbody tr { border-top: 1px solid #e2ebec; }
 tbody tr:nth-child(even) { background: #f8fbfb; }

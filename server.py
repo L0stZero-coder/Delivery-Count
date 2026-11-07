@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent
 LIMIT = 10 * 1024 * 1024
 HEADERS = ("product name", "product model", "qty", "colour")
 OPTIONAL_HEADERS = ("box number", "barcode")
-IGNORED_HEADERS = {"product image", "w price"}
+IGNORED_HEADERS = {"product image", "w price", "price", "retail price", "wholesale price"}
 EXTENSIONS = (".xlsx", ".xls", ".xl", ".ods")
 ODS_NS = {
     "office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
@@ -205,19 +205,22 @@ def grouped_history(rows):
         identity = (row["id"], row["product_id"])
         if identity not in groups:
             groups[identity] = {
-                field: row[field] for field in ("id", "arrival", "boxes", "name", "model", "colour")
+                field: row[field] for field in ("id", "product_id", "arrival", "boxes", "name", "model", "colour")
             } | {"qty": 0, "box_number": {}, "barcode": {}, "details": {}}
         group = groups[identity]
         group["qty"] += row["qty"]
-        for field in ("box_number", "barcode"):
-            if row[field]:
-                group[field][row[field]] = None
+        box = row["box_number"]
+        if box:
+            group["box_number"][box] = group["box_number"].get(box, 0) + row["qty"]
+        if row["barcode"]:
+            group["barcode"][row["barcode"]] = None
         for heading, value in json.loads(row["details"]).items():
             values = group["details"].setdefault(heading, {})
             if value:
                 values[value] = None
 
     for group in groups.values():
+        group["box_quantities"] = list(group["box_number"].items())
         for field in ("box_number", "barcode"):
             group[field] = ", ".join(group[field])
         group["details"] = {heading: ", ".join(values) for heading, values in group["details"].items()}

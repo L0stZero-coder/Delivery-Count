@@ -4,6 +4,79 @@ const date = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: '
 let currentSearch;
 let searchTimer;
 
+const selected = new Set();
+const reportColumns = [
+    'Arrival Date', 'Delivery Boxes', 'Product Model', 'Product Name', 'Colour',
+    'Box Number + Qty in that Box', 'Barcode', 'Total QTY',
+];
+
+function rowKey(row) {
+    return row.id + ':' + row.product_id;
+}
+
+function reportValues(row, display = false) {
+    const quantity = (value) => display ? number.format(value) : value;
+    const boxes = row.box_quantities.map(([box, qty]) => box + ' (' + quantity(qty) + ')');
+    return [
+        display ? date.format(new Date(row.arrival)) : row.arrival,
+        quantity(row.boxes), row.model, row.name, row.colour,
+        boxes.join(', '), row.barcode, quantity(row.qty),
+    ];
+}
+
+function csvCell(value) {
+    let text = String(value);
+    // Prevent imported text from being interpreted as an Excel formula.
+    if (typeof value === 'string' && /^[\s]*[=+@-]/.test(text)) text = "'" + text;
+    return '"' + text.replaceAll('"', '""') + '"';
+}
+
+function makeCsv(rows) {
+    return [reportColumns, ...rows.map((row) => reportValues(row))]
+        .map((fields) => fields.map(csvCell).join(','))
+        .join('\r\n') + '\r\n';
+}
+
+function updateSelection() {
+    byId('selection-status').textContent = selected.size
+        ? number.format(selected.size) + ' selected · CSV includes selected rows'
+        : 'No selection · CSV includes all deliveries';
+    byId('clear-selection').hidden = selected.size === 0;
+}
+
+byId('clear-selection').addEventListener('click', () => {
+    selected.clear();
+    byId('rows').querySelectorAll('input[type="checkbox"]').forEach((box) => { box.checked = false; });
+    updateSelection();
+});
+
+byId('export').addEventListener('click', async () => {
+    const button = byId('export');
+    const status = byId('report-status');
+    const selection = new Set(selected);
+    button.disabled = true;
+    status.textContent = '';
+    try {
+        const response = await fetch('/api/history');
+        if (!response.ok) throw new Error();
+        const { rows } = await response.json();
+        const report = selection.size ? rows.filter((row) => selection.has(rowKey(row))) : rows;
+        const url = URL.createObjectURL(new Blob(['\uFEFF', makeCsv(report)], { type: 'text/csv;charset=utf-8' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = selection.size ? 'selected-delivery-products.csv' : 'delivery-history.csv';
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        status.className = 'success';
+        status.textContent = number.format(report.length) + ' rows exported.';
+    } catch {
+        status.className = 'error';
+        status.textContent = 'Could not download the report. Try again.';
+    } finally {
+        button.disabled = false;
+    }
+});
+
 async function showHistory() {
     currentSearch?.abort();
     const search = new AbortController();
@@ -18,29 +91,25 @@ async function showHistory() {
         if (!response.ok) throw new Error();
         const { rows, total } = await response.json();
         if (search.signal.aborted) return;
-        const headings = [...new Set(rows.flatMap((row) => Object.keys(row.details)))];
-        const header = byId('history-head');
-        header.querySelectorAll('.extra-heading').forEach((cell) => cell.remove());
-        for (const heading of headings) {
-            const cell = document.createElement('th');
-            cell.className = 'extra-heading';
-            cell.textContent = heading;
-            header.insertBefore(cell, header.lastElementChild);
-        }
-        byId('total-label').colSpan = header.cells.length - 1;
         const fragment = document.createDocumentFragment();
         for (const row of rows) {
             const tr = document.createElement('tr');
-            const values = [
-                date.format(new Date(row.arrival)), '#' + row.id, row.name, row.model,
-                row.colour, number.format(row.boxes), row.box_number || '—', row.barcode || '—',
-                ...headings.map((heading) => Object.hasOwn(row.details, heading) ? row.details[heading] : ''),
-                number.format(row.qty),
-            ];
-            values.forEach((value, index) => {
+            const selection = tr.insertCell();
+            const checkbox = document.createElement('input');
+            const identity = rowKey(row);
+            checkbox.type = 'checkbox';
+            checkbox.checked = selected.has(identity);
+            checkbox.setAttribute('aria-label', 'Select ' + [row.name, row.model, row.colour, row.arrival, 'delivery ' + row.id].join(', '));
+            checkbox.addEventListener('change', () => {
+                if (checkbox.checked) selected.add(identity);
+                else selected.delete(identity);
+                updateSelection();
+            });
+            selection.append(checkbox);
+            reportValues(row, true).forEach((value, index) => {
                 const cell = tr.insertCell();
-                cell.textContent = value;
-                if (index === 5 || index === values.length - 1) cell.className = 'num';
+                cell.textContent = value === '' ? '—' : value;
+                if (index === 1 || index === 7) cell.className = 'num';
             });
             fragment.append(tr);
         }
