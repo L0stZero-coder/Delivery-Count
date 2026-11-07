@@ -1,6 +1,6 @@
 # Delivery Count
 
-A shared delivery log for a local network. Import an Excel workbook, enter the arrival date and the total boxes, then filter delivery history by product name and colour. History combines matching product names, models and colours within each delivery, listing distinct box numbers and barcodes with the summed quantity. The bottom row shows the quantity across the matching lines.
+A shared delivery log for a local network. Import an Excel workbook, enter the arrival date and the total boxes, then search delivery history by any combination of product name, model and colour. History combines matching product names, models and colours within each delivery, listing distinct box numbers and barcodes with the summed quantity. The bottom row shows the quantity across the matching lines.
 
 ## Run on the host PC
 

@@ -254,12 +254,19 @@ class Handler(BaseHTTPRequestHandler):
             with sqlite3.connect(self.server.database) as db:
                 db.row_factory = sqlite3.Row
                 rows = db.execute("""
-                    SELECT d.id, d.arrival, d.boxes, p.id AS product_id, p.name, p.model, p.colour, i.qty, i.box_number, i.barcode, i.details
+                    SELECT d.id, d.arrival, d.boxes, p.id AS product_id,
+                           p.name_key || ' ' || p.model_key || ' ' || p.colour_key AS search_text,
+                           p.name, p.model, p.colour, i.qty, i.box_number, i.barcode, i.details
                     FROM delivery_lines i JOIN deliveries d ON d.id = i.delivery
                     JOIN products p ON p.id = i.product
                     WHERE instr(p.name_key, ?) > 0 AND instr(p.colour_key, ?) > 0
                     ORDER BY d.arrival DESC, d.id DESC, p.name_key, p.model_key, p.colour_key, i.rowid
                 """, terms).fetchall()
+            query = key(filters.get("q", [""])[0]).split()
+            if query:
+                rows = [row for row in rows if all(
+                    term in row["search_text"] for term in query
+                )]
             rows = grouped_history(rows)
             self.json(200, {"rows": rows, "total": sum(row["qty"] for row in rows)})
         else:

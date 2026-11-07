@@ -9,7 +9,7 @@ async function showHistory() {
     const search = new AbortController();
     currentSearch = search;
     const query = new URLSearchParams({
-        name: byId('name-filter').value,
+        q: byId('name-filter').value,
         colour: byId('colour-filter').value,
     });
     const status = byId('history-status');
