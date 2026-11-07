@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Delivery Count</title>
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header><div class="wrap"><span class="brand">▤ &nbsp; Delivery Count</span><span class="badge">LOCAL INVENTORY</span></div></header>
+<main class="wrap">
+<section class="intro">
+<p class="eyebrow">STOCK RECEIVING</p>
+<h1>Delivery tracker</h1>
+<p>Log incoming stock and check what arrived, when.</p>
+</section>
+<section class="card" aria-labelledby="upload-title">
+<h2 id="upload-title">Record a delivery</h2>
+<p>Use the first worksheet with the headers Product Name, Product Model, QTY and Colour.</p>
+<form id="upload">
+<label>Excel workbook<input id="workbook" type="file" accept=".xlsx,.xls" required></label>
+<label>Arrival date<input id="arrival" type="date" required></label>
+<label>Boxes in delivery<input id="boxes" type="number" min="1" max="2147483647" step="1" placeholder="e.g. 4" required></label>
+<button id="save">Save delivery</button>
+</form>
+<p id="upload-status" role="status"></p>
+</section>
+<section class="card" aria-labelledby="history-title">
+<h2 id="history-title">Delivery history</h2>
+<p>Search by product name, colour or both.</p>
+<div class="filters">
+<label>Product name<input id="name-filter" type="search" placeholder="e.g. iPhone"></label>
+<label>Colour<input id="colour-filter" type="search" placeholder="e.g. Black"></label>
+<button id="clear" class="secondary">Clear filters</button>
+</div>
+<p id="history-status" role="status">Loading delivery history…</p>
+<div class="table-scroll" tabindex="0" aria-label="Delivery history table">
+<table>
+<thead><tr><th>Arrival date</th><th>Delivery</th><th>Product name</th><th>Product model</th><th>Colour</th><th class="num">Delivery boxes</th><th class="num">QTY</th></tr></thead>
+<tbody id="rows"></tbody>
+<tfoot><tr><th colspan="6" scope="row">Total quantity</th><td id="total" class="num">—</td></tr></tfoot>
+</table>
+</div>
+<p class="note">Box counts apply to the whole delivery. Items with the same delivery number arrived together.</p>
+</section>
+</main>
+</body>
+</html>
