@@ -11,11 +11,18 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import xlrd
+from defusedxml.ElementTree import fromstring
 from openpyxl import load_workbook
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 10 * 1024 * 1024
 HEADERS = ("product name", "product model", "qty", "colour")
+EXTENSIONS = (".xlsx", ".xls", ".xl", ".ods")
+ODS_NS = {
+    "office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+    "table": "urn:oasis:names:tc:opendocument:xmlns:table:1.0",
+    "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+}
 
 
 def label(value):
@@ -65,8 +72,41 @@ def read_rows(rows):
     return items
 
 
+def ods_tag(namespace, name):
+    return f"{{{ODS_NS[namespace]}}}{name}"
+
+
+def ods_rows(content):
+    root = fromstring(content)
+    sheet = root.find("office:body/office:spreadsheet/table:table", ODS_NS)
+    if sheet is None:
+        raise ValueError("The ODS workbook has no worksheets.")
+    for row in sheet.iter(ods_tag("table", "table-row")):
+        values = []
+        for cell in row:
+            if cell.tag not in (ods_tag("table", "table-cell"), ods_tag("table", "covered-table-cell")):
+                continue
+            value = cell.get(ods_tag("office", "value"))
+            if value is None:
+                value = cell.get(ods_tag("office", "string-value"))
+            if value is None:
+                value = " ".join("".join(p.itertext()) for p in cell.findall("text:p", ODS_NS))
+            copies = int(cell.get(ods_tag("table", "number-columns-repeated"), "1"))
+            values.extend([value] * min(copies, 16_384 - len(values)))
+            if len(values) == 16_384:
+                break
+        repeats = int(row.get(ods_tag("table", "number-rows-repeated"), "1"))
+        if not any(values):
+            yield []
+            continue
+        for _ in range(min(repeats, 50_002)):
+            yield values
+
+
 def read_workbook(data, extension):
     try:
+        if extension == ".xl":
+            extension = ".xlsx" if zipfile.is_zipfile(io.BytesIO(data)) else ".xls"
         if extension == ".xls":
             workbook = xlrd.open_workbook(file_contents=data, on_demand=True)
             try:
@@ -77,6 +117,8 @@ def read_workbook(data, extension):
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             if sum(entry.file_size for entry in archive.infolist()) > 80 * 1024 * 1024:
                 raise ValueError("The workbook is too large once expanded.")
+            if extension == ".ods":
+                return read_rows(ods_rows(archive.read("content.xml")))
         workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
         try:
             sheet = workbook.worksheets[0]
@@ -145,8 +187,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Enter a valid delivery arrival date.") from None
             boxes = positive_int(options.get("boxes", [""])[0], "Boxes")
             extension = options.get("extension", [""])[0].lower()
-            if extension not in (".xlsx", ".xls"):
-                raise ValueError("Choose an .xlsx or .xls workbook.")
+            if extension not in EXTENSIONS:
+                raise ValueError("Choose an .xlsx, .xls, .xl or .ods workbook.")
             length = int(self.headers.get("Content-Length", "0"))
             if not 0 < length <= LIMIT:
                 raise ValueError("Choose a non-empty workbook up to 10 MB.")

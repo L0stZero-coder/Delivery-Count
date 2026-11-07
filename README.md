@@ -15,7 +15,9 @@ Open http://localhost:8765 on the host PC. On another device on the same Wi-Fi, 
 
 ## Import format
 
-Place Product Name, Product Model, QTY and Colour in the first non-empty row of the first worksheet. Column order and capitalisation can vary. Each item needs a name, model, colour and positive whole-number quantity. The app accepts .xlsx and .xls workbooks up to 10 MB and 50,000 rows.
+Place Product Name, Product Model, QTY and Colour in the first non-empty row of the first worksheet. Column order and capitalisation can vary. Each item needs a name, model, colour and positive whole-number quantity. The app accepts .xlsx, .xls, .xl and .ods workbooks up to 10 MB and 50,000 rows.
+
+A .xl file must contain an Excel workbook in either .xlsx or .xls format.
 
 Matching product name, model and colour combinations are grouped across capitalisation and spacing variants. Repeated combinations within one workbook are added together. Each saved upload records a separate delivery, including when two deliveries share an arrival date. The box count belongs to the delivery as a whole.
 
