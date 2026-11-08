@@ -17,7 +17,7 @@ Open http://localhost:8765 on the host PC. On another device on the same Wi-Fi, 
 
 ## Import format
 
-Place Product Name, Model (or Product Model), QTY and Colour in the first non-empty row of the worksheet named Sheet 1 or Sheet1. Column order and capitalisation can vary. Each item needs a name, model, colour and positive whole-number quantity. The app accepts .xlsx, .xls, .xl and .ods workbooks up to 10 MB and 50,000 rows.
+Place Product Name, Model (or Product Model), QTY and Colour in the first non-empty row of the worksheet named Sheet 1 or Sheet1. Column order and capitalisation can vary. Each item needs a name, model, colour and positive whole-number quantity. The app accepts .xlsx, .xls, .xl and .ods workbooks up to 50 MB and 50,000 rows.
 
 A .xl file must contain an Excel workbook in either .xlsx or .xls format.
 

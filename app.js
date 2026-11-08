@@ -160,6 +160,11 @@ byId('upload').addEventListener('submit', async (event) => {
     const file = byId('workbook').files[0];
     const button = byId('save');
     if (!file || button.disabled) return;
+    if (file.size === 0 || file.size > 50 * 1024 * 1024) {
+        byId('upload-status').className = 'error';
+        byId('upload-status').textContent = 'Choose a non-empty workbook up to 50 MB.';
+        return;
+    }
     const query = new URLSearchParams({
         arrival: byId('arrival').value,
         boxes: byId('boxes').value,

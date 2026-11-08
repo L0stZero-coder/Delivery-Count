@@ -17,7 +17,7 @@ from openpyxl import load_workbook
 from openpyxl.utils.cell import range_boundaries
 
 ROOT = Path(__file__).resolve().parent
-LIMIT = 10 * 1024 * 1024
+LIMIT = 50 * 1024 * 1024
 HEADERS = ("product name", "product model", "qty", "colour")
 OPTIONAL_HEADERS = ("box number", "barcode")
 IGNORED_HEADERS = {"product image", "w price", "price", "retail price", "wholesale price"}
@@ -298,7 +298,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Choose an .xlsx, .xls, .xl or .ods workbook.")
             length = int(self.headers.get("Content-Length", "0"))
             if not 0 < length <= LIMIT:
-                raise ValueError("Choose a non-empty workbook up to 10 MB.")
+                raise ValueError("Choose a non-empty workbook up to 50 MB.")
             data = self.rfile.read(length)
             if len(data) != length:
                 raise ValueError("The workbook upload was incomplete.")
