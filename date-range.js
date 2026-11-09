@@ -96,13 +96,19 @@ for (const preset of ['Today', 'Yesterday', 'Last 7 days', 'This month', 'Last m
             end.setDate(end.getDate() - 1);
         }
         if (preset === 'Last 7 days') start.setDate(start.getDate() - 6);
-        if (preset === 'This month') start.setDate(1);
+        if (preset === 'This month') {
+            start.setDate(1);
+            end.setMonth(end.getMonth() + 1, 0);
+        }
         if (preset === 'Last month') {
             start.setDate(1);
             start.setMonth(start.getMonth() - 1);
             end.setDate(0);
         }
-        if (preset === 'This year') start.setMonth(0, 1);
+        if (preset === 'This year') {
+            start.setMonth(0, 1);
+            end.setMonth(11, 31);
+        }
         rangeStart = rangeIso(start);
         rangeEnd = rangeIso(end);
         rangeMonth = new Date(end.getFullYear(), end.getMonth() - 1, 1);
