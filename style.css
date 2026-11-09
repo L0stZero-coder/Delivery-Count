@@ -15,7 +15,8 @@ p { color: #4c626a; margin: .45rem 0 1rem; line-height: 1.5; }
 .card { padding: clamp(1rem, 3vw, 1.65rem); background: #fff; border: 1px solid #d8e4e6; border-radius: 14px; margin-bottom: 1rem; }
 form, .filters { display: grid; gap: .85rem; align-items: end; }
 form { grid-template-columns: minmax(220px, 2fr) 1fr 1fr auto; }
-.filters { grid-template-columns: 2fr 1fr 1fr auto; }
+.filters { grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(130px, 1fr)) auto; }
+@media (max-width: 1200px) { .filters { grid-template-columns: repeat(3, 1fr); } }
 label { display: grid; gap: .35rem; font-size: .87rem; font-weight: 650; min-width: 0; }
 input, button { min-height: 44px; font: inherit; border-radius: 8px; }
 input { border: 1px solid #adbec3; width: 100%; padding: .55rem .65rem; background: #fff; color: inherit; }

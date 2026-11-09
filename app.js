@@ -87,12 +87,15 @@ async function showHistory() {
         q: byId('name-filter').value,
         colour: byId('colour-filter').value,
         boxes: byId('boxes-filter').value,
+        date_from: byId('date-from').value,
+        date_to: byId('date-to').value,
     });
     const status = byId('history-status');
     try {
         const response = await fetch('/api/history?' + query, { signal: search.signal });
-        if (!response.ok) throw new Error();
-        const { rows, total } = await response.json();
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Could not load delivery history.');
+        const { rows, total } = result;
         if (search.signal.aborted) return;
         const fragment = document.createDocumentFragment();
         for (const row of rows) {
@@ -133,18 +136,23 @@ async function showHistory() {
             ? number.format(rows.length) + (rows.length === 1 ? ' matching line' : ' matching lines')
             : 'No deliveries match this search.';
         status.className = '';
-    } catch {
+    } catch (error) {
         if (search.signal.aborted) return;
         byId('rows').replaceChildren();
         byId('total').textContent = '—';
-        status.textContent = 'Could not load delivery history. Refresh to try again.';
+        status.textContent = error.message || 'Could not load delivery history. Refresh to try again.';
         status.className = 'error';
     }
 }
 
-byId('arrival').value = new Date().toLocaleDateString('sv-SE');
+const today = new Date();
+const firstDay = new Date(today);
+firstDay.setDate(firstDay.getDate() - 6);
+byId('arrival').value = today.toLocaleDateString('sv-SE');
+byId('date-from').value = firstDay.toLocaleDateString('sv-SE');
+byId('date-to').value = today.toLocaleDateString('sv-SE');
 
-for (const id of ['name-filter', 'colour-filter', 'boxes-filter']) {
+for (const id of ['name-filter', 'colour-filter', 'boxes-filter', 'date-from', 'date-to']) {
     byId(id).addEventListener('input', () => {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(showHistory, 150);
@@ -155,6 +163,8 @@ byId('clear').addEventListener('click', () => {
     byId('name-filter').value = '';
     byId('colour-filter').value = '';
     byId('boxes-filter').value = '';
+    byId('date-from').value = '';
+    byId('date-to').value = '';
     clearTimeout(searchTimer);
     showHistory();
 });

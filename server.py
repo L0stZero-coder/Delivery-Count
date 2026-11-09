@@ -301,6 +301,20 @@ class Handler(BaseHTTPRequestHandler):
                     WHERE instr(p.name_key, ?) > 0 AND instr(p.colour_key, ?) > 0
                     ORDER BY d.arrival DESC, d.id DESC, p.name_key, p.model_key, p.colour_key, i.rowid
                 """, terms).fetchall()
+            start = filters.get("date_from", [""])[0]
+            end = filters.get("date_to", [""])[0]
+            try:
+                for boundary in (start, end):
+                    if boundary and (not re.fullmatch(r"\d{4}-\d{2}-\d{2}", boundary)
+                                     or date.fromisoformat(boundary).isoformat() != boundary):
+                        raise ValueError()
+                if start and end and start > end:
+                    raise ValueError()
+            except ValueError:
+                self.json(400, {"error": "Choose valid arrival dates with From on or before To."})
+                return
+            rows = [row for row in rows if (not start or row["arrival"] >= start)
+                    and (not end or row["arrival"] <= end)]
             boxes = filters.get("boxes", [""])[0].strip()
             if boxes:
                 rows = [row for row in rows if str(row["boxes"]) == boxes]
