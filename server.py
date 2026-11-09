@@ -199,6 +199,13 @@ def read_workbook(data, extension):
         raise ValueError("Could not read Sheet 1. Check that this is a valid Excel workbook.") from error
 
 
+def model_sort_key(row):
+    return tuple(
+        (0, int(part)) if part.isdecimal() else (1, part)
+        for part in re.split(r"(\d+)", key(row["model"])) if part
+    )
+
+
 def grouped_history(rows):
     groups = {}
     for row in rows:
@@ -224,7 +231,7 @@ def grouped_history(rows):
         for field in ("box_number", "barcode"):
             group[field] = ", ".join(group[field])
         group["details"] = {heading: ", ".join(values) for heading, values in group["details"].items()}
-    return list(groups.values())
+    return sorted(groups.values(), key=model_sort_key)
 
 
 class Handler(BaseHTTPRequestHandler):
