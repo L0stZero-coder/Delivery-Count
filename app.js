@@ -84,6 +84,7 @@ async function showHistory() {
     const query = new URLSearchParams({
         q: byId('name-filter').value,
         colour: byId('colour-filter').value,
+        boxes: byId('boxes-filter').value,
     });
     const status = byId('history-status');
     try {
@@ -141,7 +142,7 @@ async function showHistory() {
 
 byId('arrival').value = new Date().toLocaleDateString('sv-SE');
 
-for (const id of ['name-filter', 'colour-filter']) {
+for (const id of ['name-filter', 'colour-filter', 'boxes-filter']) {
     byId(id).addEventListener('input', () => {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(showHistory, 150);
@@ -151,6 +152,7 @@ for (const id of ['name-filter', 'colour-filter']) {
 byId('clear').addEventListener('click', () => {
     byId('name-filter').value = '';
     byId('colour-filter').value = '';
+    byId('boxes-filter').value = '';
     clearTimeout(searchTimer);
     showHistory();
 });

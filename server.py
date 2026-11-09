@@ -265,6 +265,9 @@ class Handler(BaseHTTPRequestHandler):
                     WHERE instr(p.name_key, ?) > 0 AND instr(p.colour_key, ?) > 0
                     ORDER BY d.arrival DESC, d.id DESC, p.name_key, p.model_key, p.colour_key, i.rowid
                 """, terms).fetchall()
+            boxes = filters.get("boxes", [""])[0].strip()
+            if boxes:
+                rows = [row for row in rows if str(row["boxes"]) == boxes]
             query = key(filters.get("q", [""])[0]).split()
             if query:
                 rows = [row for row in rows if all(
