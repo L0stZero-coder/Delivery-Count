@@ -66,7 +66,62 @@ async function loadDeliveries() {
                     [save, arrival, boxes].forEach((input) => { input.disabled = false; });
                 }
             });
-            card.append(title, boxList, form, message);
+            const replacementForm = document.createElement('form');
+            replacementForm.className = 'edit-form';
+            const fileLabel = document.createElement('label');
+            fileLabel.textContent = 'Updated spreadsheet (up to 50 MB)';
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.xlsx,.xls,.xl,.ods';
+            fileInput.required = true;
+            fileLabel.append(fileInput);
+            const replace = document.createElement('button');
+            replace.textContent = 'Re-upload Excel';
+            const replacementMessage = document.createElement('p');
+            replacementMessage.setAttribute('role', 'status');
+            const explanation = document.createElement('p');
+            explanation.textContent = 'Re-upload replaces the product and box-number data for this delivery. The saved arrival date and total delivery-box count are retained.';
+            replacementForm.append(fileLabel, replace);
+            replacementForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const file = fileInput.files[0];
+                if (!file || replace.disabled) return;
+                replacementMessage.className = '';
+                if (!file.size || file.size > 50 * 1024 * 1024) {
+                    replacementMessage.className = 'error';
+                    replacementMessage.textContent = 'Choose a non-empty workbook up to 50 MB.';
+                    return;
+                }
+                const query = new URLSearchParams({
+                    extension: file.name.slice(file.name.lastIndexOf('.')),
+                    revision: delivery.revision,
+                });
+                replace.disabled = fileInput.disabled = true;
+                replacementMessage.textContent = 'Replacing delivery data…';
+                try {
+                    const response = await fetch('/api/deliveries/' + delivery.id + '/replace?' + query, {
+                        method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file,
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error);
+                    delivery.revision = result.revision;
+                    delivery.box_numbers = result.box_numbers;
+                    boxList.textContent = result.box_numbers.length
+                        ? 'Box numbers · ' + result.box_numbers.join(', ')
+                        : 'Box numbers were not recorded for this delivery.';
+                    fileInput.value = '';
+                    replacementMessage.className = 'success';
+                    replacementMessage.textContent = 'Delivery replaced. ' + result.qty.toLocaleString('en-GB') + ' units saved.';
+                } catch (error) {
+                    replacementMessage.className = 'error';
+                    replacementMessage.textContent = error instanceof TypeError
+                        ? 'Connection lost. Reload to check the delivery before re-uploading.'
+                        : error.message;
+                } finally {
+                    replace.disabled = fileInput.disabled = false;
+                }
+            });
+            card.append(title, boxList, form, message, explanation, replacementForm, replacementMessage);
             container.append(card);
         }
         status.textContent = deliveries.length ? deliveries.length + ' deliveries' : 'No deliveries have been recorded.';

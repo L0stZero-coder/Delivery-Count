@@ -377,7 +377,8 @@ class Handler(BaseHTTPRequestHandler):
         if edit:
             self.edit_delivery(int(edit[1]))
             return
-        if url.path != "/api/deliveries":
+        replacement = re.fullmatch(r"/api/deliveries/(\d+)/replace", url.path)
+        if url.path != "/api/deliveries" and not replacement:
             self.json(404, {"error": "Page not found."})
             return
         if self.headers.get("Content-Type") != "application/octet-stream":
@@ -385,14 +386,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             options = parse_qs(url.query)
-            arrival = options.get("arrival", [""])[0]
-            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", arrival):
-                raise ValueError("Enter the delivery arrival date.")
-            try:
-                date.fromisoformat(arrival)
-            except ValueError:
-                raise ValueError("Enter a valid delivery arrival date.") from None
-            boxes = positive_int(options.get("boxes", [""])[0], "Boxes")
+            if not replacement:
+                arrival = options.get("arrival", [""])[0]
+                if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", arrival):
+                    raise ValueError("Enter the delivery arrival date.")
+                try:
+                    date.fromisoformat(arrival)
+                except ValueError:
+                    raise ValueError("Enter a valid delivery arrival date.") from None
+                boxes = positive_int(options.get("boxes", [""])[0], "Boxes")
             extension = options.get("extension", [""])[0].lower()
             if extension not in EXTENSIONS:
                 raise ValueError("Choose an .xlsx, .xls, .xl or .ods workbook.")
@@ -404,7 +406,19 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("The workbook upload was incomplete.")
             items = read_workbook(data, extension)
             with sqlite3.connect(self.server.database) as db:
-                delivery = db.execute("INSERT INTO deliveries(arrival, boxes) VALUES (?, ?)", (arrival, boxes)).lastrowid
+                if replacement:
+                    delivery = int(replacement[1])
+                    revision = int(options.get("revision", ["-1"])[0])
+                    updated = db.execute(
+                        "UPDATE deliveries SET revision=revision+1 WHERE id=? AND revision=?",
+                        (delivery, revision),
+                    ).rowcount
+                    if not updated:
+                        self.json(409, {"error": "This delivery has changed or is unavailable. Reload before re-uploading."})
+                        return
+                    db.execute("DELETE FROM delivery_lines WHERE delivery=?", (delivery,))
+                else:
+                    delivery = db.execute("INSERT INTO deliveries(arrival, boxes) VALUES (?, ?)", (arrival, boxes)).lastrowid
                 for identity, (name, model, colour, qty) in items.items():
                     *product, box, barcode, details = identity
                     db.execute("""
@@ -415,7 +429,11 @@ class Handler(BaseHTTPRequestHandler):
                         INSERT INTO delivery_lines(delivery, product, qty, box_number, barcode, details)
                         SELECT ?, id, ?, ?, ?, ? FROM products WHERE name_key=? AND model_key=? AND colour_key=?
                     """, (delivery, qty, box, barcode, details, *product))
-            self.json(201, {"items": len(items), "qty": sum(item[3] for item in items.values())})
+            result = {"items": len(items), "qty": sum(item[3] for item in items.values())}
+            if replacement:
+                result.update(revision=revision + 1, box_numbers=list(dict.fromkeys(
+                    identity[3] for identity in items if identity[3])))
+            self.json(200 if replacement else 201, result)
         except ValueError as error:
             self.json(400, {"error": str(error)})
         except sqlite3.Error:
@@ -452,6 +470,8 @@ def main():
         if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='items'").fetchone():
             db.execute("INSERT INTO delivery_lines(delivery, product, qty) SELECT delivery, product, qty FROM items")
             db.execute("DROP TABLE items")
+        if "revision" not in {column[1] for column in db.execute("PRAGMA table_info(deliveries)")}:
+            db.execute("ALTER TABLE deliveries ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
         normalize_existing_models(db)
     with ThreadingHTTPServer((args.host, args.port), Handler) as server:
         server.database = args.database
