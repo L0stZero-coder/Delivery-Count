@@ -6,8 +6,8 @@ let searchTimer;
 
 const selected = new Set();
 const reportColumns = [
-    'Arrival Date', 'Delivery Boxes', 'Product Model', 'Product Name', 'Colour',
-    'Box Number + Qty in that Box', 'Barcode', 'Total QTY',
+    'Select', 'Arrival Date', 'Delivery Boxes', 'Product Model', 'Product Name', 'Colour',
+    'Total QTY', 'Barcode', 'Box Number + Qty in that Box',
 ];
 
 function rowKey(row) {
@@ -20,7 +20,7 @@ function reportValues(row, display = false) {
     return [
         display ? date.format(new Date(row.arrival)) : row.arrival,
         quantity(row.boxes), row.model, row.name, row.colour,
-        boxes.join(', '), row.barcode, quantity(row.qty),
+        quantity(row.qty), row.barcode, boxes.join(', '),
     ];
 }
 
@@ -31,8 +31,10 @@ function csvCell(value) {
     return '"' + text.replaceAll('"', '""') + '"';
 }
 
-function makeCsv(rows) {
-    return [reportColumns, ...rows.map((row) => reportValues(row))]
+function makeCsv(rows, selection) {
+    return [reportColumns, ...rows.map((row) => [
+        selection.has(rowKey(row)) ? 'Yes' : 'No', ...reportValues(row),
+    ])]
         .map((fields) => fields.map(csvCell).join(','))
         .join('\r\n') + '\r\n';
 }
@@ -61,7 +63,7 @@ byId('export').addEventListener('click', async () => {
         if (!response.ok) throw new Error();
         const { rows } = await response.json();
         const report = selection.size ? rows.filter((row) => selection.has(rowKey(row))) : rows;
-        const url = URL.createObjectURL(new Blob(['\uFEFF', makeCsv(report)], { type: 'text/csv;charset=utf-8' }));
+        const url = URL.createObjectURL(new Blob(['\uFEFF', makeCsv(report, selection)], { type: 'text/csv;charset=utf-8' }));
         const link = document.createElement('a');
         link.href = url;
         link.download = selection.size ? 'selected-delivery-products.csv' : 'delivery-history.csv';
@@ -109,7 +111,7 @@ async function showHistory() {
             selection.append(checkbox);
             reportValues(row, true).forEach((value, index) => {
                 const cell = tr.insertCell();
-                if (index === 5 && row.box_quantities.length) {
+                if (index === 7 && row.box_quantities.length) {
                     const list = document.createElement('ul');
                     list.className = 'box-list';
                     for (const [box, qty] of row.box_quantities) {
@@ -121,7 +123,7 @@ async function showHistory() {
                 } else {
                     cell.textContent = value === '' ? '—' : value;
                 }
-                if (index === 1 || index === 7) cell.className = 'num';
+                if (index === 1 || index === 5) cell.className = 'num';
             });
             fragment.append(tr);
         }
