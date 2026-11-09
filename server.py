@@ -283,10 +283,21 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = urlsplit(self.path)
         assets = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"),
-                  "/style.css": ("style.css", "text/css")}
+                  "/style.css": ("style.css", "text/css"),
+                  "/edit": ("edit.html", "text/html"), "/edit.js": ("edit.js", "text/javascript")}
         if url.path in assets:
             filename, mime = assets[url.path]
             self.reply(200, (ROOT / filename).read_bytes(), mime + "; charset=utf-8")
+        elif url.path == "/api/deliveries":
+            with sqlite3.connect(self.server.database) as db:
+                db.row_factory = sqlite3.Row
+                deliveries = []
+                for row in db.execute("SELECT * FROM deliveries ORDER BY arrival DESC, id DESC"):
+                    boxes = [item[0] for item in db.execute(
+                        "SELECT DISTINCT box_number FROM delivery_lines WHERE delivery=? AND box_number<>'' ORDER BY rowid",
+                        (row["id"],))]
+                    deliveries.append(dict(row) | {"box_numbers": boxes})
+            self.json(200, {"deliveries": deliveries})
         elif url.path == "/api/history":
             filters = parse_qs(url.query)
             terms = [key(filters.get(field, [""])[0]) for field in ("name", "colour")]
@@ -328,8 +339,43 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.json(404, {"error": "Page not found."})
 
+    def edit_delivery(self, delivery_id):
+        if self.headers.get("Content-Type") != "application/json":
+            self.json(415, {"error": "Expected delivery details as JSON."})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if not 0 < length <= 4096:
+                raise ValueError("Invalid delivery details.")
+            values = json.loads(self.rfile.read(length))
+            if not isinstance(values, dict):
+                raise ValueError("Invalid delivery details.")
+            arrival = str(values.get("arrival", ""))
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", arrival):
+                raise ValueError("Enter a valid arrival date.")
+            date.fromisoformat(arrival)
+            boxes = positive_int(values.get("boxes", ""), "Delivery boxes")
+            with sqlite3.connect(self.server.database) as db:
+                changed = db.execute(
+                    "UPDATE deliveries SET arrival=?, boxes=? WHERE id=? AND arrival=? AND boxes=?",
+                    (arrival, boxes, delivery_id, str(values.get("previous_arrival", "")),
+                     str(values.get("previous_boxes", ""))),
+                ).rowcount
+            if not changed:
+                self.json(409, {"error": "This delivery has changed. Reload the page before editing it."})
+                return
+            self.json(200, {"arrival": arrival, "boxes": boxes})
+        except (ValueError, UnicodeDecodeError):
+            self.json(400, {"error": "Enter a valid arrival date and a positive whole-number box count."})
+        except sqlite3.Error:
+            self.json(503, {"error": "Could not save the delivery. Please try again."})
+
     def do_POST(self):
         url = urlsplit(self.path)
+        edit = re.fullmatch(r"/api/deliveries/(\d+)/edit", url.path)
+        if edit:
+            self.edit_delivery(int(edit[1]))
+            return
         if url.path != "/api/deliveries":
             self.json(404, {"error": "Page not found."})
             return
