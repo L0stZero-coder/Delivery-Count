@@ -37,6 +37,35 @@ def key(value):
     return label(value).casefold()
 
 
+def normalize_model(value):
+    model = label(value)
+    model = re.sub(r"\b(?:ip|iphone)(?=\b|\d)", "iPhone", model, flags=re.I)
+    model = re.sub(r"\b(?:pad|ipad)\b", "iPad", model, flags=re.I)
+    model = re.sub(r"^iPhone\s*", "iPhone ", model)
+    if re.match(r"^\d+(?:\.0+)?(?=\b|[eEcC](?:\b|/))", model):
+        model = "iPhone " + model
+    if model.startswith("iPhone "):
+        model = re.sub(r"\b(\d+)\.0+\b", r"\1", model)
+    return model.strip()
+
+
+def normalize_existing_models(db):
+    for product_id, name_key, model, colour_key in db.execute(
+        "SELECT id, name_key, model, colour_key FROM products ORDER BY id"
+    ).fetchall():
+        normalized = normalize_model(model)
+        target = db.execute(
+            "SELECT id FROM products WHERE name_key=? AND model_key=? AND colour_key=?",
+            (name_key, key(normalized), colour_key),
+        ).fetchone()
+        if target and target[0] != product_id:
+            db.execute("UPDATE delivery_lines SET product=? WHERE product=?", (target[0], product_id))
+            db.execute("DELETE FROM products WHERE id=?", (product_id,))
+        else:
+            db.execute("UPDATE products SET model=?, model_key=? WHERE id=?",
+                       (normalized, key(normalized), product_id))
+
+
 def positive_int(value, field):
     if isinstance(value, bool) or not re.fullmatch(r"[0-9]+(?:\.0+)?", str(value).strip()):
         raise ValueError(f"{field} must be a whole number greater than zero.")
@@ -100,7 +129,7 @@ def read_rows(rows):
         name, model, qty, colour = [row[i] if i < len(row) else None for i in indexes]
         if not any(label(cell) for cell in (name, model, qty, colour)):
             continue
-        names = tuple(map(label, (name, model, colour)))
+        names = (label(name), normalize_model(model), label(colour))
         if not all(names):
             raise ValueError(f"Data row {row_number - 1} needs a product name, model and colour.")
         quantity = positive_int(qty, f"QTY on data row {row_number - 1}")
@@ -362,6 +391,7 @@ def main():
         if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='items'").fetchone():
             db.execute("INSERT INTO delivery_lines(delivery, product, qty) SELECT delivery, product, qty FROM items")
             db.execute("DROP TABLE items")
+        normalize_existing_models(db)
     with ThreadingHTTPServer((args.host, args.port), Handler) as server:
         server.database = args.database
         print(f"Delivery Count is listening on {args.host}:{args.port}", flush=True)
