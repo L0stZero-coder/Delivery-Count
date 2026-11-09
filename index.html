@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Delivery Count</title>
 <link rel="stylesheet" href="/style.css">
+<script src="/date-range.js" defer></script>
 <script src="/app.js" defer></script>
 </head>
 <body>
@@ -33,8 +34,17 @@
 <label>Search products<input id="name-filter" type="search" placeholder="e.g. Duo 6D tempered glass black"></label>
 <label>Colour<input id="colour-filter" type="search" placeholder="e.g. Black"></label>
 <label>Delivery Boxes<input id="boxes-filter" type="number" min="1" step="1" placeholder="e.g. 69"></label>
-<label>Arrival from<input id="date-from" type="date"></label>
-<label>Arrival to<input id="date-to" type="date"></label>
+<div class="range-control">
+<span class="range-label">Arrival date range</span>
+<button id="range-toggle" class="range-toggle" type="button" aria-expanded="false" aria-controls="range-panel">Select dates</button>
+<input id="date-from" type="hidden"><input id="date-to" type="hidden">
+<div id="range-panel" class="range-panel" hidden>
+<div class="range-presets" id="range-presets"></div>
+<p id="range-help" role="status">Select a start date, then an end date.</p>
+<div class="calendar-nav"><button id="range-prev" type="button" aria-label="Previous month">‹</button><span>Select arrival dates</span><button id="range-next" type="button" aria-label="Next month">›</button></div>
+<div id="range-calendars" class="range-calendars"></div>
+<div class="range-footer"><span id="range-preview"></span><button id="range-cancel" type="button" class="secondary">Cancel</button><button id="range-apply" type="button">Apply</button></div>
+</div></div>
 <button id="clear" class="secondary">Clear filters</button>
 </div>
 <div class="report-actions">

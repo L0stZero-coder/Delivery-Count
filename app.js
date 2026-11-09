@@ -169,16 +169,19 @@ function resetDateRange() {
     firstDay.setDate(firstDay.getDate() - 6);
     byId('date-from').value = firstDay.toLocaleDateString('sv-SE');
     byId('date-to').value = today.toLocaleDateString('sv-SE');
+    updateDateRangeLabel();
 }
 byId('arrival').value = new Date().toLocaleDateString('sv-SE');
 resetDateRange();
 
-for (const id of ['name-filter', 'colour-filter', 'boxes-filter', 'date-from', 'date-to']) {
+for (const id of ['name-filter', 'colour-filter', 'boxes-filter']) {
     byId(id).addEventListener('input', () => {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(showHistory, 150);
     });
 }
+
+document.addEventListener('arrival-range-change', showHistory);
 
 byId('clear').addEventListener('click', () => {
     byId('name-filter').value = '';

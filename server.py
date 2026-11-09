@@ -284,6 +284,7 @@ class Handler(BaseHTTPRequestHandler):
         url = urlsplit(self.path)
         assets = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"),
                   "/style.css": ("style.css", "text/css"),
+                  "/date-range.js": ("date-range.js", "text/javascript"),
                   "/edit": ("edit.html", "text/html"), "/edit.js": ("edit.js", "text/javascript")}
         if url.path in assets:
             filename, mime = assets[url.path]
