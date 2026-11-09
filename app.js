@@ -79,26 +79,11 @@ byId('export').addEventListener('click', async () => {
     }
 });
 
-async function showHistory() {
-    currentSearch?.abort();
-    const search = new AbortController();
-    currentSearch = search;
-    const query = new URLSearchParams({
-        q: byId('name-filter').value,
-        colour: byId('colour-filter').value,
-        boxes: byId('boxes-filter').value,
-        date_from: byId('date-from').value,
-        date_to: byId('date-to').value,
-    });
-    const status = byId('history-status');
-    try {
-        const response = await fetch('/api/history?' + query, { signal: search.signal });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Could not load delivery history.');
-        const { rows, total } = result;
-        if (search.signal.aborted) return;
+let historyRows = [];
+let shownRows = 0;
+function showMoreRows() {
         const fragment = document.createDocumentFragment();
-        for (const row of rows) {
+        for (const row of historyRows.slice(shownRows, shownRows + 100)) {
             const tr = document.createElement('tr');
             const selection = tr.insertCell();
             const checkbox = document.createElement('input');
@@ -130,11 +115,44 @@ async function showHistory() {
             });
             fragment.append(tr);
         }
-        byId('rows').replaceChildren(fragment);
+        byId('rows').append(fragment);
+    shownRows = Math.min(shownRows + 100, historyRows.length);
+    byId('load-more').hidden = shownRows >= historyRows.length;
+    byId('history-status').textContent = historyRows.length
+        ? 'Showing ' + number.format(shownRows) + ' of ' + number.format(historyRows.length) + ' matching rows'
+        : 'No deliveries match this search.';
+}
+
+byId('load-more').addEventListener('click', showMoreRows);
+const rowObserver = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting) && !byId('load-more').hidden) showMoreRows();
+});
+rowObserver.observe(byId('load-more'));
+
+async function showHistory() {
+    currentSearch?.abort();
+    byId('load-more').hidden = true;
+    const search = new AbortController();
+    currentSearch = search;
+    const query = new URLSearchParams({
+        q: byId('name-filter').value,
+        colour: byId('colour-filter').value,
+        boxes: byId('boxes-filter').value,
+        date_from: byId('date-from').value,
+        date_to: byId('date-to').value,
+    });
+    const status = byId('history-status');
+    try {
+        const response = await fetch('/api/history?' + query, { signal: search.signal });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Could not load delivery history.');
+        const { rows, total } = result;
+        if (search.signal.aborted) return;
+        historyRows = rows;
+        shownRows = 0;
+        byId('rows').replaceChildren();
+        showMoreRows();
         byId('total').textContent = number.format(total);
-        status.textContent = rows.length
-            ? number.format(rows.length) + (rows.length === 1 ? ' matching line' : ' matching lines')
-            : 'No deliveries match this search.';
         status.className = '';
     } catch (error) {
         if (search.signal.aborted) return;
@@ -145,12 +163,15 @@ async function showHistory() {
     }
 }
 
-const today = new Date();
-const firstDay = new Date(today);
-firstDay.setDate(firstDay.getDate() - 6);
-byId('arrival').value = today.toLocaleDateString('sv-SE');
-byId('date-from').value = firstDay.toLocaleDateString('sv-SE');
-byId('date-to').value = today.toLocaleDateString('sv-SE');
+function resetDateRange() {
+    const today = new Date();
+    const firstDay = new Date(today);
+    firstDay.setDate(firstDay.getDate() - 6);
+    byId('date-from').value = firstDay.toLocaleDateString('sv-SE');
+    byId('date-to').value = today.toLocaleDateString('sv-SE');
+}
+byId('arrival').value = new Date().toLocaleDateString('sv-SE');
+resetDateRange();
 
 for (const id of ['name-filter', 'colour-filter', 'boxes-filter', 'date-from', 'date-to']) {
     byId(id).addEventListener('input', () => {
@@ -163,8 +184,7 @@ byId('clear').addEventListener('click', () => {
     byId('name-filter').value = '';
     byId('colour-filter').value = '';
     byId('boxes-filter').value = '';
-    byId('date-from').value = '';
-    byId('date-to').value = '';
+    resetDateRange();
     clearTimeout(searchTimer);
     showHistory();
 });
