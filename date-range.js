@@ -121,7 +121,12 @@ rangeElement('range-apply').addEventListener('click', () => {
     document.dispatchEvent(new Event('arrival-range-change'));
 });
 document.addEventListener('click', (event) => {
-    if (!event.target.closest('.range-control')) closeRange();
+    // Calendar rendering replaces the clicked button before this handler runs.
+    // The original event path still identifies clicks inside the date picker.
+    const path = event.composedPath();
+    if (!path.includes(rangeElement('range-panel')) && !path.includes(rangeElement('range-toggle'))) {
+        closeRange();
+    }
 });
 document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !rangeElement('range-panel').hidden) {
