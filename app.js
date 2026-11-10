@@ -163,14 +163,6 @@ async function showHistory() {
     }
 }
 
-function resetDateRange() {
-    const today = new Date();
-    const firstDay = new Date(today);
-    firstDay.setDate(firstDay.getDate() - 6);
-    byId('date-from').value = firstDay.toLocaleDateString('sv-SE');
-    byId('date-to').value = today.toLocaleDateString('sv-SE');
-    updateDateRangeLabel();
-}
 byId('arrival').value = new Date().toLocaleDateString('sv-SE');
 resetDateRange();
 

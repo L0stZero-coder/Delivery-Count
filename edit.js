@@ -1,6 +1,36 @@
 const container = document.getElementById('deliveries');
 const status = document.getElementById('status');
 
+const boxesFilter = document.getElementById('boxes-filter');
+const deliveryCards = [];
+let deliveriesLoaded = false;
+
+function filterDeliveries() {
+    if (!deliveriesLoaded) return;
+    const boxes = boxesFilter.value;
+    const from = document.getElementById('date-from').value;
+    const to = document.getElementById('date-to').value;
+    let count = 0;
+    for (const { delivery, card } of deliveryCards) {
+        const matches = (!boxes || String(delivery.boxes) === boxes)
+            && delivery.arrival >= from && delivery.arrival <= to;
+        card.hidden = !matches;
+        if (matches) count++;
+    }
+    status.textContent = count
+        ? count + (count === 1 ? ' matching delivery' : ' matching deliveries')
+        : 'No deliveries match these filters.';
+}
+
+resetDateRange();
+boxesFilter.addEventListener('input', filterDeliveries);
+document.addEventListener('arrival-range-change', filterDeliveries);
+document.getElementById('clear').addEventListener('click', () => {
+    boxesFilter.value = '';
+    resetDateRange();
+    filterDeliveries();
+});
+
 async function loadDeliveries() {
     try {
         const response = await fetch('/api/deliveries');
@@ -57,6 +87,7 @@ async function loadDeliveries() {
                     const result = await response.json();
                     if (!response.ok) throw new Error(result.error);
                     Object.assign(delivery, result);
+                    filterDeliveries();
                     message.className = 'success';
                     message.textContent = 'Changes saved.';
                 } catch (error) {
@@ -122,9 +153,11 @@ async function loadDeliveries() {
                 }
             });
             card.append(title, boxList, form, message, explanation, replacementForm, replacementMessage);
+            deliveryCards.push({ delivery, card });
             container.append(card);
         }
-        status.textContent = deliveries.length ? deliveries.length + ' deliveries' : 'No deliveries have been recorded.';
+        deliveriesLoaded = true;
+        filterDeliveries();
     } catch {
         status.className = 'error';
         status.textContent = 'Could not load deliveries. Refresh to try again.';

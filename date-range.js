@@ -10,6 +10,14 @@ function updateDateRangeLabel() {
     rangeElement('range-toggle').textContent = '▦ ' + rangeDisplay(rangeElement('date-from').value)
         + ' – ' + rangeDisplay(rangeElement('date-to').value);
 }
+function resetDateRange() {
+    const today = new Date();
+    const firstDay = new Date(today);
+    firstDay.setDate(firstDay.getDate() - 6);
+    rangeElement('date-from').value = rangeIso(firstDay);
+    rangeElement('date-to').value = rangeIso(today);
+    updateDateRangeLabel();
+}
 function closeRange() {
     rangeElement('range-panel').hidden = true;
     rangeElement('range-toggle').setAttribute('aria-expanded', 'false');

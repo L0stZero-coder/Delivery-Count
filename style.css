@@ -78,3 +78,6 @@ tfoot { background: #e3f2ee; border-top: 1px solid #cddedb; font-weight: 750; }
  .range-panel { right: auto; left: 0; width: calc(100vw - 4rem); max-height: 70vh; overflow-y: auto; }
  .range-calendars { grid-template-columns: 1fr; }
 }
+
+.edit-filters { grid-template-columns: minmax(120px, 1fr) minmax(250px, 2fr) auto; max-width: 760px; }
+@media (max-width: 520px) { .edit-filters { grid-template-columns: 1fr; } }
