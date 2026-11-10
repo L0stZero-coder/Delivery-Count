@@ -16,6 +16,8 @@ from defusedxml.ElementTree import fromstring
 from openpyxl import load_workbook
 from openpyxl.utils.cell import range_boundaries
 
+from backup import BACKUPS
+
 ROOT = Path(__file__).resolve().parent
 LIMIT = 50 * 1024 * 1024
 HEADERS = ("product name", "product model", "qty", "colour")
@@ -298,7 +300,7 @@ class Handler(BaseHTTPRequestHandler):
                         "SELECT DISTINCT box_number FROM delivery_lines WHERE delivery=? AND box_number<>'' ORDER BY rowid",
                         (row["id"],))]
                     deliveries.append(dict(row) | {"box_numbers": boxes})
-            self.json(200, {"deliveries": deliveries})
+            self.json(200, {"deliveries": deliveries, "backup_path": str(BACKUPS)})
         elif url.path == "/api/history":
             filters = parse_qs(url.query)
             terms = [key(filters.get(field, [""])[0]) for field in ("name", "colour")]

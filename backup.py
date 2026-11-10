@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 SOURCE = Path(__file__).resolve().parent / "data" / "deliveries.sqlite3"
-BACKUPS = Path(os.environ["LOCALAPPDATA"]) / "Delivery Count" / "Backups"
+BACKUPS = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "Delivery Count" / "Backups"
 
 
 def backup_database():

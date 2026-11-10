@@ -35,7 +35,11 @@ async function loadDeliveries() {
     try {
         const response = await fetch('/api/deliveries');
         if (!response.ok) throw new Error();
-        const { deliveries } = await response.json();
+        const { deliveries, backup_path } = await response.json();
+        if (backup_path) {
+            document.getElementById("backup-path").textContent = backup_path;
+            document.getElementById("backup-location").hidden = false;
+        }
         for (const delivery of deliveries) {
             const card = document.createElement('section');
             card.className = 'card';

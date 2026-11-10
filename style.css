@@ -79,6 +79,7 @@ tfoot { background: #e3f2ee; border-top: 1px solid #cddedb; font-weight: 750; }
  .range-calendars { grid-template-columns: 1fr; }
 }
 
+#backup-path { overflow-wrap: anywhere; }
 .edit-filters { grid-template-columns: minmax(120px, 1fr) minmax(250px, 2fr) auto; max-width: 760px; }
 @media (max-width: 520px) { .edit-filters { grid-template-columns: 1fr; } }
 
