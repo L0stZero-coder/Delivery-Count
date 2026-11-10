@@ -193,10 +193,7 @@ function renderScheduleList(id, deliveries, emptyMessage) {
         arrival.textContent = date.format(new Date(delivery.arrival));
         const boxes = document.createElement('strong');
         boxes.textContent = number.format(delivery.boxes) + (delivery.boxes === 1 ? ' box' : ' boxes');
-        const link = document.createElement('a');
-        link.href = '/delivery?id=' + delivery.id;
-        link.textContent = '#' + delivery.id;
-        item.append(link, arrival, boxes);
+        item.append(arrival, boxes);
         list.append(item);
     }
 }
