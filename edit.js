@@ -31,6 +31,107 @@ document.getElementById('clear').addEventListener('click', () => {
     filterDeliveries();
 });
 
+const activityStatus = document.getElementById('activity-status');
+const activityMessage = document.getElementById('activity-message');
+const activityList = document.getElementById('activity-list');
+const activityDate = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+let activityRequest;
+
+function updateBoxList(list, boxNumbers) {
+    list.textContent = boxNumbers.length
+        ? 'Box numbers · ' + boxNumbers.join(', ')
+        : 'Box numbers were not recorded for this delivery.';
+}
+
+function describeActivity(entry) {
+    if (entry.kind === 'replace') {
+        return 'Spreadsheet replaced · ' + entry.old_qty.toLocaleString('en-GB')
+            + ' → ' + entry.new_qty.toLocaleString('en-GB') + ' units';
+    }
+    const changes = [];
+    if (entry.old_arrival !== entry.new_arrival) {
+        changes.push('Arrival date ' + rangeDisplay(entry.old_arrival) + ' → ' + rangeDisplay(entry.new_arrival));
+    }
+    if (entry.old_boxes !== entry.new_boxes) {
+        changes.push('Delivery boxes ' + entry.old_boxes + ' → ' + entry.new_boxes);
+    }
+    return changes.join(' · ');
+}
+
+async function loadActivity() {
+    activityRequest?.abort();
+    const request = new AbortController();
+    activityRequest = request;
+    try {
+        const response = await fetch('/api/activity', { signal: request.signal });
+        if (!response.ok) throw new Error();
+        const { activity } = await response.json();
+        if (request.signal.aborted) return;
+        const fragment = document.createDocumentFragment();
+        for (const entry of activity) {
+            const item = document.createElement('li');
+            const title = document.createElement('strong');
+            title.textContent = 'Delivery #' + entry.delivery;
+            const summary = document.createElement('p');
+            summary.textContent = describeActivity(entry);
+            const time = document.createElement('time');
+            time.dateTime = entry.created_at;
+            time.textContent = activityDate.format(new Date(entry.created_at));
+            item.append(title, summary, time);
+            if (entry.undone_at) {
+                const undone = document.createElement('p');
+                undone.textContent = 'Undone ' + activityDate.format(new Date(entry.undone_at));
+                item.append(undone);
+            } else if (entry.can_undo) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'secondary';
+                button.textContent = 'Undo';
+                button.setAttribute('aria-label', 'Undo change to delivery ' + entry.delivery);
+                button.addEventListener('click', () => undoActivity(entry, button));
+                item.append(button);
+            }
+            fragment.append(item);
+        }
+        activityList.replaceChildren(fragment);
+        activityStatus.textContent = activity.length ? '' : 'No changes recorded yet.';
+    } catch {
+        if (!request.signal.aborted) activityStatus.textContent = 'Could not load the activity log. Refresh to try again.';
+    }
+}
+
+async function undoActivity(entry, button) {
+    if (button.disabled || !confirm('Undo this change to delivery #' + entry.delivery + '?')) return;
+    button.disabled = true;
+    activityMessage.className = '';
+    activityMessage.textContent = 'Undoing change…';
+    try {
+        const response = await fetch('/api/activity/' + entry.id + '/undo', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        const current = deliveryCards.find(({ delivery }) => delivery.id === result.delivery.id);
+        if (current) {
+            Object.assign(current.delivery, result.delivery);
+            if (result.kind === 'edit') {
+                current.arrival.value = result.delivery.arrival;
+                current.boxes.value = result.delivery.boxes;
+            }
+            updateBoxList(current.boxList, result.delivery.box_numbers);
+            filterDeliveries();
+        }
+        activityMessage.className = 'success';
+        activityMessage.textContent = 'Change to delivery #' + entry.delivery + ' undone.';
+    } catch (error) {
+        activityMessage.className = 'error';
+        activityMessage.textContent = error.message || 'Could not undo the change.';
+    } finally {
+        await loadActivity();
+        button.disabled = false;
+    }
+}
+
 async function loadDeliveries() {
     try {
         const response = await fetch('/api/deliveries');
@@ -46,9 +147,7 @@ async function loadDeliveries() {
             const title = document.createElement('h2');
             title.textContent = 'Delivery #' + delivery.id;
             const boxList = document.createElement('p');
-            boxList.textContent = delivery.box_numbers.length
-                ? 'Box numbers · ' + delivery.box_numbers.join(', ')
-                : 'Box numbers were not recorded for this delivery.';
+            updateBoxList(boxList, delivery.box_numbers);
             const form = document.createElement('form');
             form.className = 'edit-form';
             const dateLabel = document.createElement('label');
@@ -94,6 +193,7 @@ async function loadDeliveries() {
                     filterDeliveries();
                     message.className = 'success';
                     message.textContent = 'Changes saved.';
+                    loadActivity();
                 } catch (error) {
                     message.className = 'error';
                     message.textContent = error.message || 'Could not save. Reload the page to check the delivery.';
@@ -141,9 +241,8 @@ async function loadDeliveries() {
                     if (!response.ok) throw new Error(result.error);
                     delivery.revision = result.revision;
                     delivery.box_numbers = result.box_numbers;
-                    boxList.textContent = result.box_numbers.length
-                        ? 'Box numbers · ' + result.box_numbers.join(', ')
-                        : 'Box numbers were not recorded for this delivery.';
+                    updateBoxList(boxList, result.box_numbers);
+                    loadActivity();
                     fileInput.value = '';
                     replacementMessage.className = 'success';
                     replacementMessage.textContent = 'Delivery replaced. ' + result.qty.toLocaleString('en-GB') + ' units saved.';
@@ -157,7 +256,7 @@ async function loadDeliveries() {
                 }
             });
             card.append(title, boxList, form, message, explanation, replacementForm, replacementMessage);
-            deliveryCards.push({ delivery, card });
+            deliveryCards.push({ delivery, card, arrival, boxes, boxList });
             container.append(card);
         }
         deliveriesLoaded = true;
@@ -168,3 +267,4 @@ async function loadDeliveries() {
     }
 }
 loadDeliveries();
+loadActivity();

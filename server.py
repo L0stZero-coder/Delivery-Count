@@ -62,6 +62,7 @@ def normalize_existing_models(db):
         ).fetchone()
         if target and target[0] != product_id:
             db.execute("UPDATE delivery_lines SET product=? WHERE product=?", (target[0], product_id))
+            db.execute("UPDATE delivery_activity_lines SET product=? WHERE product=?", (target[0], product_id))
             db.execute("DELETE FROM products WHERE id=?", (product_id,))
         else:
             db.execute("UPDATE products SET model=?, model_key=? WHERE id=?",
@@ -265,6 +266,12 @@ def grouped_history(rows):
     return sorted(groups.values(), key=model_sort_key)
 
 
+def delivery_box_numbers(db, delivery):
+    return [row[0] for row in db.execute(
+        "SELECT DISTINCT box_number FROM delivery_lines WHERE delivery=? AND box_number<>'' ORDER BY rowid",
+        (delivery,))]
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         if sys.stderr is not None:
@@ -296,11 +303,19 @@ class Handler(BaseHTTPRequestHandler):
                 db.row_factory = sqlite3.Row
                 deliveries = []
                 for row in db.execute("SELECT * FROM deliveries ORDER BY arrival DESC, id DESC"):
-                    boxes = [item[0] for item in db.execute(
-                        "SELECT DISTINCT box_number FROM delivery_lines WHERE delivery=? AND box_number<>'' ORDER BY rowid",
-                        (row["id"],))]
-                    deliveries.append(dict(row) | {"box_numbers": boxes})
+                    deliveries.append(dict(row) | {"box_numbers": delivery_box_numbers(db, row["id"])})
             self.json(200, {"deliveries": deliveries, "backup_path": str(BACKUPS)})
+        elif url.path == "/api/activity":
+            with sqlite3.connect(self.server.database) as db:
+                db.row_factory = sqlite3.Row
+                activity = db.execute("""
+                    SELECT a.*, (a.undone_at IS NULL AND a.id = (
+                        SELECT MAX(id) FROM delivery_activity
+                        WHERE delivery=a.delivery AND undone_at IS NULL
+                    )) AS can_undo
+                    FROM delivery_activity a ORDER BY a.id DESC
+                """).fetchall()
+            self.json(200, {"activity": [dict(row) for row in activity]})
         elif url.path == "/api/history":
             filters = parse_qs(url.query)
             terms = [key(filters.get(field, [""])[0]) for field in ("name", "colour")]
@@ -358,12 +373,18 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Enter a valid arrival date.")
             date.fromisoformat(arrival)
             boxes = positive_int(values.get("boxes", ""), "Delivery boxes")
+            previous_arrival = str(values.get("previous_arrival", ""))
+            previous_boxes = positive_int(values.get("previous_boxes", ""), "Previous delivery boxes")
             with sqlite3.connect(self.server.database) as db:
                 changed = db.execute(
                     "UPDATE deliveries SET arrival=?, boxes=? WHERE id=? AND arrival=? AND boxes=?",
-                    (arrival, boxes, delivery_id, str(values.get("previous_arrival", "")),
-                     str(values.get("previous_boxes", ""))),
+                    (arrival, boxes, delivery_id, previous_arrival, previous_boxes),
                 ).rowcount
+                if changed and (arrival, boxes) != (previous_arrival, previous_boxes):
+                    db.execute("""
+                        INSERT INTO delivery_activity(delivery, kind, old_arrival, old_boxes, new_arrival, new_boxes)
+                        VALUES (?, 'edit', ?, ?, ?, ?)
+                    """, (delivery_id, previous_arrival, previous_boxes, arrival, boxes))
             if not changed:
                 self.json(409, {"error": "This delivery has changed. Reload the page before editing it."})
                 return
@@ -373,8 +394,53 @@ class Handler(BaseHTTPRequestHandler):
         except sqlite3.Error:
             self.json(503, {"error": "Could not save the delivery. Please try again."})
 
+    def undo_activity(self, activity_id):
+        if self.headers.get("Content-Type") != "application/json":
+            self.json(415, {"error": "Expected a JSON request."})
+            return
+        try:
+            if self.headers.get("Content-Length") != "2" or self.rfile.read(2) != b"{}":
+                self.json(400, {"error": "Invalid undo request."})
+                return
+            with sqlite3.connect(self.server.database) as db:
+                db.row_factory = sqlite3.Row
+                db.execute("BEGIN IMMEDIATE")
+                activity = db.execute("""
+                    SELECT * FROM delivery_activity WHERE id=? AND undone_at IS NULL
+                    AND id=(SELECT MAX(id) FROM delivery_activity
+                            WHERE delivery=(SELECT delivery FROM delivery_activity WHERE id=?)
+                            AND undone_at IS NULL)
+                """, (activity_id, activity_id)).fetchone()
+                if activity is None:
+                    self.json(409, {"error": "Only the latest change for a delivery can be undone. Refresh the activity log."})
+                    return
+                delivery = activity["delivery"]
+                if activity["kind"] == "edit":
+                    db.execute("UPDATE deliveries SET arrival=?, boxes=? WHERE id=?",
+                               (activity["old_arrival"], activity["old_boxes"], delivery))
+                else:
+                    db.execute("DELETE FROM delivery_lines WHERE delivery=?", (delivery,))
+                    db.execute("""
+                        INSERT INTO delivery_lines(delivery, product, qty, box_number, barcode, details)
+                        SELECT ?, product, qty, box_number, barcode, details FROM delivery_activity_lines
+                        WHERE activity=? ORDER BY rowid
+                    """, (delivery, activity_id))
+                    db.execute("UPDATE deliveries SET revision=revision+1 WHERE id=?", (delivery,))
+                db.execute("UPDATE delivery_activity SET undone_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+                           (activity_id,))
+                record = dict(db.execute("SELECT * FROM deliveries WHERE id=?", (delivery,)).fetchone())
+                record["box_numbers"] = delivery_box_numbers(db, delivery)
+            self.json(200, {"delivery": record, "kind": activity["kind"]})
+        except sqlite3.Error:
+            self.log_error("Delivery undo failed")
+            self.json(503, {"error": "Could not undo this change. Please try again."})
+
     def do_POST(self):
         url = urlsplit(self.path)
+        undo = re.fullmatch(r"/api/activity/(\d+)/undo", url.path)
+        if undo:
+            self.undo_activity(int(undo[1]))
+            return
         edit = re.fullmatch(r"/api/deliveries/(\d+)/edit", url.path)
         if edit:
             self.edit_delivery(int(edit[1]))
@@ -418,6 +484,15 @@ class Handler(BaseHTTPRequestHandler):
                     if not updated:
                         self.json(409, {"error": "This delivery has changed or is unavailable. Reload before re-uploading."})
                         return
+                    activity = db.execute("""
+                        INSERT INTO delivery_activity(delivery, kind, old_qty, new_qty)
+                        VALUES (?, 'replace', (SELECT COALESCE(SUM(qty), 0) FROM delivery_lines WHERE delivery=?), ?)
+                    """, (delivery, delivery, sum(item[3] for item in items.values()))).lastrowid
+                    db.execute("""
+                        INSERT INTO delivery_activity_lines(activity, product, qty, box_number, barcode, details)
+                        SELECT ?, product, qty, box_number, barcode, details FROM delivery_lines
+                        WHERE delivery=? ORDER BY rowid
+                    """, (activity, delivery))
                     db.execute("DELETE FROM delivery_lines WHERE delivery=?", (delivery,))
                 else:
                     delivery = db.execute("INSERT INTO deliveries(arrival, boxes) VALUES (?, ?)", (arrival, boxes)).lastrowid
@@ -467,6 +542,20 @@ def main():
                 qty INTEGER NOT NULL, box_number TEXT NOT NULL DEFAULT '',
                 barcode TEXT NOT NULL DEFAULT '', details TEXT NOT NULL DEFAULT '{}'
             );
+            CREATE TABLE IF NOT EXISTS delivery_activity (
+                id INTEGER PRIMARY KEY, delivery INTEGER NOT NULL REFERENCES deliveries(id),
+                kind TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+                undone_at TEXT, old_arrival TEXT, new_arrival TEXT, old_boxes INTEGER, new_boxes INTEGER,
+                old_qty INTEGER, new_qty INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS delivery_activity_latest ON delivery_activity(delivery, id)
+                WHERE undone_at IS NULL;
+            CREATE TABLE IF NOT EXISTS delivery_activity_lines (
+                activity INTEGER NOT NULL REFERENCES delivery_activity(id),
+                product INTEGER NOT NULL REFERENCES products(id), qty INTEGER NOT NULL,
+                box_number TEXT NOT NULL, barcode TEXT NOT NULL, details TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS delivery_activity_snapshot ON delivery_activity_lines(activity);
         """)
         db.execute("BEGIN IMMEDIATE")
         if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='items'").fetchone():

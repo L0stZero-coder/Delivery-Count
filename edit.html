@@ -6,6 +6,8 @@
 <header><div class="wrap"><span class="brand">Delivery Count</span><a class="nav-link" href="/">Back to delivery tracker</a></div></header>
 <main class="wrap">
 <section class="intro"><h1>Edit deliveries</h1><p>Filter deliveries by box count or arrival date. Update the arrival date or total box count and save each delivery.</p></section>
+<div class="edit-layout">
+<section aria-label="Deliveries">
 <div class="filters edit-filters">
 <label>Delivery Boxes<input id="boxes-filter" type="number" min="1" step="1" placeholder="e.g. 69"></label>
 <div class="range-control">
@@ -24,4 +26,13 @@
 <p id="backup-location" class="note" hidden>Backup folder on the server PC<br><code id="backup-path"></code></p>
 <p id="status" role="status">Loading deliveries…</p>
 <div id="deliveries"></div>
+</section>
+<section class="card activity-panel" aria-labelledby="activity-title">
+<h2 id="activity-title">Activity log</h2>
+<p>Delivery edits and spreadsheet replacements appear here. You can undo the latest change for each delivery.</p>
+<p id="activity-message" role="status"></p>
+<p id="activity-status" role="status">Loading activity…</p>
+<ol id="activity-list"></ol>
+</section>
+</div>
 </main></body></html>
