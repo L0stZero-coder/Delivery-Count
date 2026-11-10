@@ -184,6 +184,50 @@ byId('clear').addEventListener('click', () => {
     showHistory();
 });
 
+function renderScheduleList(id, deliveries, emptyMessage) {
+    const list = byId(id);
+    list.replaceChildren();
+    if (!deliveries.length) {
+        const item = document.createElement('li');
+        item.textContent = emptyMessage;
+        list.append(item);
+        return;
+    }
+    for (const delivery of deliveries) {
+        const item = document.createElement('li');
+        const arrival = document.createElement('time');
+        arrival.dateTime = delivery.arrival;
+        arrival.textContent = date.format(new Date(delivery.arrival));
+        const boxes = document.createElement('strong');
+        boxes.textContent = number.format(delivery.boxes) + (delivery.boxes === 1 ? ' box' : ' boxes');
+        item.append(arrival, boxes);
+        list.append(item);
+    }
+}
+
+let scheduleRequest;
+async function showDeliverySchedule() {
+    scheduleRequest?.abort();
+    const request = new AbortController();
+    scheduleRequest = request;
+    const status = byId('schedule-status');
+    try {
+        const response = await fetch('/api/deliveries', { signal: request.signal });
+        if (!response.ok) throw new Error();
+        const { deliveries } = await response.json();
+        if (request.signal.aborted) return;
+        const today = rangeIso(new Date());
+        const arrived = deliveries.filter((delivery) => delivery.arrival <= today).slice(0, 8);
+        const expected = deliveries.filter((delivery) => delivery.arrival > today)
+            .sort((a, b) => a.arrival.localeCompare(b.arrival) || a.id - b.id).slice(0, 6);
+        renderScheduleList('arrived-deliveries', arrived, 'No arrivals recorded.');
+        renderScheduleList('expected-deliveries', expected, 'No upcoming deliveries recorded.');
+        status.textContent = '';
+    } catch {
+        if (!request.signal.aborted) status.textContent = 'Could not refresh the schedule. Retrying automatically.';
+    }
+}
+
 byId('upload').addEventListener('submit', async (event) => {
     event.preventDefault();
     const file = byId('workbook').files[0];
@@ -217,7 +261,7 @@ byId('upload').addEventListener('submit', async (event) => {
         status.className = 'success';
         status.textContent = 'Delivery saved. ' + number.format(result.qty) + ' units across '
             + number.format(result.items) + (result.items === 1 ? ' product line.' : ' product lines.');
-        await showHistory();
+        await Promise.all([showHistory(), showDeliverySchedule()]);
     } catch (error) {
         status.className = 'error';
         status.textContent = error instanceof TypeError
@@ -229,3 +273,10 @@ byId('upload').addEventListener('submit', async (event) => {
 });
 
 showHistory();
+showDeliverySchedule();
+setInterval(() => {
+    if (!document.hidden) showDeliverySchedule();
+}, 30_000);
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) showDeliverySchedule();
+});

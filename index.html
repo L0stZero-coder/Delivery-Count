@@ -16,6 +16,7 @@
 <h1>Delivery tracker</h1>
 <p>Log incoming stock and check what arrived, when.</p>
 </section>
+<div class="delivery-overview">
 <section class="card" aria-labelledby="upload-title">
 <h2 id="upload-title">Record a delivery</h2>
 <p>Use Sheet 1 (or Sheet1) with Product Name, Model, QTY and Colour. Box Number and Barcode are imported when present. Maximum file size is 50 MB.</p>
@@ -27,6 +28,16 @@
 </form>
 <p id="upload-status" role="status"></p>
 </section>
+<section class="card" aria-labelledby="schedule-title">
+<h2 id="schedule-title">Delivery schedule</h2>
+<p>Based on recorded arrival dates. Refreshes every 30 seconds.</p>
+<div class="schedule-columns">
+<div><h3>Arrived</h3><ul id="arrived-deliveries" class="schedule-list"></ul></div>
+<div><h3>Expected</h3><ul id="expected-deliveries" class="schedule-list"></ul></div>
+</div>
+<p id="schedule-status" role="status">Loading delivery schedule…</p>
+</section>
+</div>
 <section class="card" aria-labelledby="history-title">
 <h2 id="history-title">Delivery history</h2>
 <p>Enter any combination of product name, model and colour in one search.</p>
