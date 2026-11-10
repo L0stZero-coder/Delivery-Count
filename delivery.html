@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Delivery details</title><link rel="stylesheet" href="/style.css">
+<script src="/report.js" defer></script><script src="/delivery.js" defer></script></head>
+<body class="delivery-detail">
+<header><div class="wrap"><span class="brand">Delivery Count</span><a class="nav-link" href="/">Back to tracker</a></div></header>
+<main class="wrap">
+<h1 id="title">Delivery details</h1><p id="status" role="status">Loading delivery…</p>
+<section id="content" hidden>
+<p id="summary"></p>
+<div class="report-actions"><button id="print">Print packing list</button><button id="download" class="secondary">Download CSV</button><a href="/edit">Edit deliveries</a></div>
+<div class="table-scroll"><table>
+<thead><tr><th>Product Model</th><th>Product Name</th><th>Colour</th><th class="num">Total QTY</th><th>Barcode</th><th>Box Number + Qty in that Box</th></tr></thead>
+<tbody id="detail-rows"></tbody>
+<tfoot><tr><th colspan="3">Total quantity</th><td id="detail-total" class="num"></td><td colspan="2"></td></tr></tfoot>
+</table></div>
+</section></main></body></html>

@@ -71,7 +71,10 @@ async function loadActivity() {
         for (const entry of activity) {
             const item = document.createElement('li');
             const title = document.createElement('strong');
-            title.textContent = 'Delivery #' + entry.delivery;
+            const link = document.createElement('a');
+            link.href = '/delivery?id=' + entry.delivery;
+            link.textContent = 'Delivery #' + entry.delivery;
+            title.append(link);
             const summary = document.createElement('p');
             summary.textContent = describeActivity(entry);
             const time = document.createElement('time');
@@ -145,7 +148,10 @@ async function loadDeliveries() {
             const card = document.createElement('section');
             card.className = 'card';
             const title = document.createElement('h2');
-            title.textContent = 'Delivery #' + delivery.id;
+            const link = document.createElement('a');
+            link.href = '/delivery?id=' + delivery.id;
+            link.textContent = 'Delivery #' + delivery.id;
+            title.append(link);
             const boxList = document.createElement('p');
             updateBoxList(boxList, delivery.box_numbers);
             const form = document.createElement('form');

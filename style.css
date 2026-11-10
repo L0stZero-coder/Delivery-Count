@@ -108,3 +108,19 @@ tfoot { background: #e3f2ee; border-top: 1px solid #cddedb; font-weight: 750; }
 .edit-filters .range-control { position: static; }
 .edit-filters .range-panel { right: auto; left: 0; }
 @media (max-width: 520px) { .edit-filters { grid-template-columns: 1fr; } }
+
+.delivery-detail .table-scroll { margin-top: 1rem; }
+.delivery-detail td:last-child { white-space: normal; min-width: 220px; }
+@media print {
+ @page { size: landscape; margin: 12mm; }
+ .delivery-detail header, .delivery-detail .report-actions { display: none; }
+ .delivery-detail { background: white; font-size: 10pt; }
+ .delivery-detail .wrap { width: 100%; padding: 0; }
+ .delivery-detail h1 { font-size: 20pt; }
+ .delivery-detail .table-scroll { overflow: visible; border: 0; }
+ .delivery-detail table { min-width: 0; table-layout: auto; }
+ .delivery-detail th, .delivery-detail td { white-space: normal; overflow-wrap: anywhere; padding: 5px; }
+ .delivery-detail td:last-child { min-width: 0; }
+ .delivery-detail thead { display: table-header-group; }
+ .delivery-detail tfoot { display: table-row-group; }
+}

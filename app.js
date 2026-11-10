@@ -24,13 +24,6 @@ function reportValues(row, display = false) {
     ];
 }
 
-function csvCell(value) {
-    let text = String(value);
-    // Prevent imported text from being interpreted as an Excel formula.
-    if (typeof value === 'string' && /^[\s]*[=+@-]/.test(text)) text = "'" + text;
-    return '"' + text.replaceAll('"', '""') + '"';
-}
-
 function makeCsv(rows, selection) {
     return [reportColumns, ...rows.map((row) => [
         selection.has(rowKey(row)) ? 'Yes' : 'No', ...reportValues(row),
@@ -200,7 +193,10 @@ function renderScheduleList(id, deliveries, emptyMessage) {
         arrival.textContent = date.format(new Date(delivery.arrival));
         const boxes = document.createElement('strong');
         boxes.textContent = number.format(delivery.boxes) + (delivery.boxes === 1 ? ' box' : ' boxes');
-        item.append(arrival, boxes);
+        const link = document.createElement('a');
+        link.href = '/delivery?id=' + delivery.id;
+        link.textContent = '#' + delivery.id;
+        item.append(link, arrival, boxes);
         list.append(item);
     }
 }

@@ -291,7 +291,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         url = urlsplit(self.path)
-        assets = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"),
+        assets = {"/delivery": ("delivery.html", "text/html"), "/delivery.js": ("delivery.js", "text/javascript"), "/report.js": ("report.js", "text/javascript"), "/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"),
                   "/style.css": ("style.css", "text/css"),
                   "/date-range.js": ("date-range.js", "text/javascript"),
                   "/edit": ("edit.html", "text/html"), "/edit.js": ("edit.js", "text/javascript")}
@@ -344,6 +344,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             rows = [row for row in rows if (not start or row["arrival"] >= start)
                     and (not end or row["arrival"] <= end)]
+            delivery_id = filters.get("delivery", [""])[0]
+            if delivery_id:
+                rows = [row for row in rows if str(row["id"]) == delivery_id]
             boxes = filters.get("boxes", [""])[0].strip()
             if boxes:
                 rows = [row for row in rows if str(row["boxes"]) == boxes]
