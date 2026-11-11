@@ -212,7 +212,7 @@ async function showDeliverySchedule() {
         const today = rangeIso(new Date());
         const arrived = deliveries.filter((delivery) => delivery.arrival <= today).slice(0, 8);
         const expected = deliveries.filter((delivery) => delivery.arrival > today)
-            .sort((a, b) => a.arrival.localeCompare(b.arrival) || a.id - b.id).slice(0, 6);
+            .sort((a, b) => a.arrival.localeCompare(b.arrival) || a.id - b.id).slice(0, 8);
         renderScheduleList('arrived-deliveries', arrived, 'No arrivals recorded.');
         renderScheduleList('expected-deliveries', expected, 'No upcoming deliveries recorded.');
         status.textContent = '';
