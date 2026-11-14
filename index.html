@@ -31,7 +31,7 @@
 </section>
 <section class="card" aria-labelledby="schedule-title">
 <h2 id="schedule-title">Delivery schedule</h2>
-<p>Based on recorded arrival dates. Refreshes every 30 seconds.</p>
+<p>Confirm arrivals when due. Refreshes every 30 seconds.</p>
 <div class="schedule-columns">
 <div><h3>Arrived</h3><ul id="arrived-deliveries" class="schedule-list"></ul></div>
 <div><h3>Expected</h3><ul id="expected-deliveries" class="schedule-list"></ul></div>
@@ -77,5 +77,18 @@
 <p class="note">Delivery Boxes is the declared total for the shipment. Boxes Containing Product counts distinct recorded cartons, including shared cartons. Quantities beside ranges are totals for the range. Scroll the table sideways to see more columns on a narrow screen.</p>
 </section>
 </main>
+<dialog id="delivery-status-dialog" aria-labelledby="delivery-status-title">
+<h2 id="delivery-status-title">Has this delivery arrived?</h2>
+<p id="delivery-status-description"></p>
+<form id="delivery-status-form">
+<label>Arrival date<input id="confirmed-arrival" type="date" required></label>
+<button type="submit" id="confirm-arrived">Confirm arrived</button>
+<button type="button" id="choose-delay" class="secondary">Delayed</button>
+<label id="delay-date-label" hidden>New expected date<input id="delayed-date" type="date"></label>
+<button type="button" id="confirm-delayed" hidden>Save delayed date</button>
+<button type="button" id="cancel-status" class="secondary">Cancel</button>
+</form>
+<p id="status-save-message" role="status"></p>
+</dialog>
 </body>
 </html>

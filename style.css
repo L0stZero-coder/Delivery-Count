@@ -124,3 +124,13 @@ tfoot { background: #e3f2ee; border-top: 1px solid #cddedb; font-weight: 750; }
  .delivery-detail thead { display: table-header-group; }
  .delivery-detail tfoot { display: table-row-group; }
 }
+
+.delivery-tag { display: inline-block; border-radius: 5px; padding: .18rem .45rem; font-size: .78rem; font-weight: 700; }
+.tag-arrived { background: #d8f2de; color: #17572d; }
+.tag-expected { background: #fff0c2; color: #775000; }
+.tag-delayed { background: #ffe0de; color: #982c25; }
+.arrival-check { min-height: 28px; font-size: .78rem; padding: .2rem .5rem; }
+#delivery-status-dialog { border: 1px solid #adbec3; border-radius: 12px; padding: 1.5rem; width: min(440px, calc(100vw - 2rem)); }
+#delivery-status-dialog::backdrop { background: #12313b80; }
+#delivery-status-form { grid-template-columns: 1fr; }
+[hidden] { display: none !important; }

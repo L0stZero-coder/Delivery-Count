@@ -44,6 +44,10 @@ function updateBoxList(list, boxNumbers) {
 }
 
 function describeActivity(entry) {
+    if (entry.kind === 'status') {
+        return 'Status ' + entry.old_status + ' → ' + entry.new_status
+            + ' · Date ' + rangeDisplay(entry.old_arrival) + ' → ' + rangeDisplay(entry.new_arrival);
+    }
     if (entry.kind === 'replace') {
         return 'Spreadsheet replaced · ' + entry.old_qty.toLocaleString('en-GB')
             + ' → ' + entry.new_qty.toLocaleString('en-GB') + ' units';
@@ -117,7 +121,7 @@ async function undoActivity(entry, button) {
         const current = deliveryCards.find(({ delivery }) => delivery.id === result.delivery.id);
         if (current) {
             Object.assign(current.delivery, result.delivery);
-            if (result.kind === 'edit') {
+            if (result.kind === 'edit' || result.kind === 'status') {
                 current.arrival.value = result.delivery.arrival;
                 current.boxes.value = result.delivery.boxes;
             }

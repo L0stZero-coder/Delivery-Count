@@ -245,7 +245,7 @@ def grouped_history(rows):
         identity = (row["id"], row["product_id"])
         if identity not in groups:
             groups[identity] = {
-                field: row[field] for field in ("id", "product_id", "arrival", "boxes", "name", "model", "colour")
+                field: row[field] for field in ("id", "product_id", "arrival", "status", "boxes", "name", "model", "colour")
             } | {"qty": 0, "box_number": {}, "barcode": {}, "details": {}, "recorded_box_labels": []}
         group = groups[identity]
         group["qty"] += row["qty"]
@@ -334,7 +334,7 @@ class Handler(BaseHTTPRequestHandler):
                 db.row_factory = sqlite3.Row
                 db.execute("BEGIN")
                 rows = db.execute("""
-                    SELECT d.id, d.arrival, d.boxes, p.id AS product_id,
+                    SELECT d.id, d.arrival, d.status, d.boxes, p.id AS product_id,
                            p.name_key || ' ' || p.model_key || ' ' || p.colour_key AS search_text,
                            p.name, p.model, p.colour, i.qty, i.box_number, i.barcode, i.details
                     FROM delivery_lines i JOIN deliveries d ON d.id = i.delivery
@@ -438,7 +438,10 @@ class Handler(BaseHTTPRequestHandler):
                     self.json(409, {"error": "Only the latest change for a delivery can be undone. Refresh the activity log."})
                     return
                 delivery = activity["delivery"]
-                if activity["kind"] == "edit":
+                if activity["kind"] == "status":
+                    db.execute("UPDATE deliveries SET arrival=?, status=? WHERE id=?",
+                               (activity["old_arrival"], activity["old_status"], delivery))
+                elif activity["kind"] == "edit":
                     db.execute("UPDATE deliveries SET arrival=?, boxes=? WHERE id=?",
                                (activity["old_arrival"], activity["old_boxes"], delivery))
                 else:
@@ -459,11 +462,54 @@ class Handler(BaseHTTPRequestHandler):
             self.log_error("Delivery undo failed")
             self.json(503, {"error": "Could not undo this change. Please try again."})
 
+    def change_delivery_status(self, delivery_id):
+        if self.headers.get("Content-Type") != "application/json":
+            self.json(415, {"error": "Expected JSON."})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if not 0 < length <= 4096:
+                raise ValueError()
+            values = json.loads(self.rfile.read(length))
+            if not isinstance(values, dict) or values.get("status") not in ("arrived", "delayed"):
+                raise ValueError()
+            status = values["status"]
+            arrival = str(values.get("arrival", ""))
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", arrival):
+                raise ValueError()
+            parsed = date.fromisoformat(arrival)
+            if (status == "delayed" and parsed <= date.today()) or (status == "arrived" and parsed > date.today()):
+                raise ValueError()
+            with sqlite3.connect(self.server.database) as db:
+                db.row_factory = sqlite3.Row
+                db.execute("BEGIN IMMEDIATE")
+                previous = db.execute("SELECT * FROM deliveries WHERE id=?", (delivery_id,)).fetchone()
+                if previous is None or previous["status"] == "arrived" or (
+                    previous["status"], previous["arrival"]
+                ) != (values.get("previous_status"), values.get("previous_arrival")):
+                    self.json(409, {"error": "This delivery has changed. Close this window and refresh the schedule."})
+                    return
+                db.execute("UPDATE deliveries SET arrival=?, status=? WHERE id=?", (arrival, status, delivery_id))
+                db.execute("""
+                    INSERT INTO delivery_activity(delivery, kind, old_arrival, new_arrival,
+                        old_status, new_status)
+                    VALUES (?, 'status', ?, ?, ?, ?)
+                """, (delivery_id, previous["arrival"], arrival, previous["status"], status))
+            self.json(200, {"status": status, "arrival": arrival})
+        except (ValueError, UnicodeDecodeError):
+            self.json(400, {"error": "Choose a valid date. Delayed deliveries need a future expected date."})
+        except sqlite3.Error:
+            self.json(503, {"error": "Could not update delivery status. Try again."})
+
     def do_POST(self):
         url = urlsplit(self.path)
         undo = re.fullmatch(r"/api/activity/(\d+)/undo", url.path)
         if undo:
             self.undo_activity(int(undo[1]))
+            return
+        status_change = re.fullmatch(r"/api/deliveries/(\d+)/status", url.path)
+        if status_change:
+            self.change_delivery_status(int(status_change[1]))
             return
         edit = re.fullmatch(r"/api/deliveries/(\d+)/edit", url.path)
         if edit:
@@ -519,7 +565,8 @@ class Handler(BaseHTTPRequestHandler):
                     """, (activity, delivery))
                     db.execute("DELETE FROM delivery_lines WHERE delivery=?", (delivery,))
                 else:
-                    delivery = db.execute("INSERT INTO deliveries(arrival, boxes) VALUES (?, ?)", (arrival, boxes)).lastrowid
+                    delivery = db.execute("INSERT INTO deliveries(arrival, boxes, status) VALUES (?, ?, ?)",
+                                          (arrival, boxes, "arrived" if arrival <= date.today().isoformat() else "expected")).lastrowid
                 for identity, (name, model, colour, qty) in items.items():
                     *product, box, barcode, details = identity
                     db.execute("""
@@ -590,6 +637,13 @@ def main():
             db.execute("DROP TABLE items")
         if "revision" not in {column[1] for column in db.execute("PRAGMA table_info(deliveries)")}:
             db.execute("ALTER TABLE deliveries ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
+        if "status" not in {column[1] for column in db.execute("PRAGMA table_info(deliveries)")}:
+            db.execute("ALTER TABLE deliveries ADD COLUMN status TEXT NOT NULL DEFAULT 'expected'")
+            db.execute("UPDATE deliveries SET status='arrived' WHERE arrival<=?", (date.today().isoformat(),))
+        activity_columns = {column[1] for column in db.execute("PRAGMA table_info(delivery_activity)")}
+        for column in ("old_status", "new_status"):
+            if column not in activity_columns:
+                db.execute(f"ALTER TABLE delivery_activity ADD COLUMN {column} TEXT")
         normalize_existing_models(db)
     with ThreadingHTTPServer((args.host, args.port), Handler) as server:
         server.database = args.database

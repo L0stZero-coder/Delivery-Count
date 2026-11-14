@@ -104,6 +104,7 @@ function showMoreRows() {
                 } else {
                     cell.textContent = value === '' ? '—' : value;
                 }
+                if (index === 0) cell.append(' ', deliveryTag(row.status));
                 if (index === 1 || index === 5 || index === 8) cell.className = 'num';
                 if (index === 8) cell.title = row.product_box_count.issues.join('; ');
             });
@@ -178,6 +179,13 @@ byId('clear').addEventListener('click', () => {
     showHistory();
 });
 
+function deliveryTag(status) {
+    const tag = document.createElement('span');
+    tag.className = 'delivery-tag tag-' + status;
+    tag.textContent = { arrived: 'Arrived', expected: 'Expected', delayed: 'Delayed' }[status];
+    return tag;
+}
+
 function renderScheduleList(id, deliveries, emptyMessage) {
     const list = byId(id);
     list.replaceChildren();
@@ -194,10 +202,83 @@ function renderScheduleList(id, deliveries, emptyMessage) {
         arrival.textContent = date.format(new Date(delivery.arrival));
         const boxes = document.createElement('strong');
         boxes.textContent = number.format(delivery.boxes) + (delivery.boxes === 1 ? ' box' : ' boxes');
-        item.append(arrival, boxes);
+        item.append(arrival, boxes, deliveryTag(delivery.status));
+        if (delivery.status !== 'arrived' && delivery.arrival <= rangeIso(new Date())) {
+            const check = document.createElement('button');
+            check.type = 'button';
+            check.className = 'arrival-check';
+            check.textContent = 'Arrived?';
+            check.addEventListener('click', () => openStatusDialog(delivery));
+            item.append(check);
+        }
         list.append(item);
     }
 }
+
+let statusDelivery;
+let savingStatus = false;
+const statusDialog = byId('delivery-status-dialog');
+function openStatusDialog(delivery) {
+    if (savingStatus) return;
+    statusDelivery = delivery;
+    byId('confirm-arrived').hidden = false;
+    byId('delivery-status-description').textContent = number.format(delivery.boxes)
+        + ' boxes · Expected ' + date.format(new Date(delivery.arrival));
+    byId('confirmed-arrival').value = rangeIso(new Date());
+    byId('confirmed-arrival').max = rangeIso(new Date());
+    byId('delay-date-label').hidden = true;
+    byId('confirm-delayed').hidden = true;
+    byId('delayed-date').value = '';
+    byId('status-save-message').textContent = '';
+    statusDialog.showModal();
+}
+byId('choose-delay').addEventListener('click', () => {
+    byId('confirm-arrived').hidden = true;
+    byId('delay-date-label').hidden = false;
+    byId('confirm-delayed').hidden = false;
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    byId('delayed-date').min = rangeIso(tomorrow);
+    byId('delayed-date').focus();
+});
+byId('cancel-status').addEventListener('click', () => statusDialog.close());
+statusDialog.addEventListener('cancel', (event) => { if (savingStatus) event.preventDefault(); });
+async function saveDeliveryStatus(status, arrival) {
+    if (savingStatus) return;
+    savingStatus = true;
+    const controls = [...byId('delivery-status-form').elements];
+    controls.forEach((control) => { control.disabled = true; });
+    byId('status-save-message').textContent = 'Saving…';
+    try {
+        const response = await fetch('/api/deliveries/' + statusDelivery.id + '/status', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({status, arrival,
+                previous_status: statusDelivery.status, previous_arrival: statusDelivery.arrival}),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        statusDialog.close();
+        await Promise.all([showDeliverySchedule(), showHistory()]);
+    } catch (error) {
+        byId('status-save-message').textContent = error.message || 'Could not save. Try again.';
+    } finally {
+        savingStatus = false;
+        controls.forEach((control) => { control.disabled = false; });
+    }
+}
+byId('delivery-status-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!byId('delay-date-label').hidden) {
+        byId('confirm-delayed').click();
+    } else {
+        saveDeliveryStatus('arrived', byId('confirmed-arrival').value);
+    }
+});
+byId('confirm-delayed').addEventListener('click', () => {
+    const input = byId('delayed-date');
+    if (!input.value) { input.focus(); return; }
+    if (input.reportValidity()) saveDeliveryStatus('delayed', input.value);
+});
 
 let scheduleRequest;
 async function showDeliverySchedule() {
@@ -210,9 +291,8 @@ async function showDeliverySchedule() {
         if (!response.ok) throw new Error();
         const { deliveries } = await response.json();
         if (request.signal.aborted) return;
-        const today = rangeIso(new Date());
-        const arrived = deliveries.filter((delivery) => delivery.arrival <= today).slice(0, 8);
-        const expected = deliveries.filter((delivery) => delivery.arrival > today)
+        const arrived = deliveries.filter((delivery) => delivery.status === 'arrived').slice(0, 8);
+        const expected = deliveries.filter((delivery) => delivery.status !== 'arrived')
             .sort((a, b) => a.arrival.localeCompare(b.arrival) || a.id - b.id).slice(0, 8);
         renderScheduleList('arrived-deliveries', arrived, 'No arrivals recorded.');
         renderScheduleList('expected-deliveries', expected, 'No upcoming deliveries recorded.');

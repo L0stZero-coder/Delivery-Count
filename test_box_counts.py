@@ -32,7 +32,7 @@ class BoxCountingTests(unittest.TestCase):
         self.assertEqual(count_boxes(["KE1-5"], 5)["difference"], 0)
 
     def test_quantities_and_original_labels(self):
-        base = dict(id=1, product_id=1, arrival="2026-11-14", boxes=6,
+        base = dict(status="arrived", id=1, product_id=1, arrival="2026-11-14", boxes=6,
                     name="Holder", model="Y-H107", colour="Black", barcode="00123", details="{}")
         rows = [dict(base, qty=500, box_number="KE1-KE5"),
                 dict(base, qty=20, box_number="ke3"),
