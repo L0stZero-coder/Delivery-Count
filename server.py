@@ -17,6 +17,7 @@ from openpyxl import load_workbook
 from openpyxl.utils.cell import range_boundaries
 
 from backup import BACKUPS
+from box_counts import count_boxes
 
 ROOT = Path(__file__).resolve().parent
 LIMIT = 50 * 1024 * 1024
@@ -245,10 +246,11 @@ def grouped_history(rows):
         if identity not in groups:
             groups[identity] = {
                 field: row[field] for field in ("id", "product_id", "arrival", "boxes", "name", "model", "colour")
-            } | {"qty": 0, "box_number": {}, "barcode": {}, "details": {}}
+            } | {"qty": 0, "box_number": {}, "barcode": {}, "details": {}, "recorded_box_labels": []}
         group = groups[identity]
         group["qty"] += row["qty"]
         box = row["box_number"]
+        group["recorded_box_labels"].append(box)
         if box:
             group["box_number"][box] = group["box_number"].get(box, 0) + row["qty"]
         if row["barcode"]:
@@ -259,6 +261,7 @@ def grouped_history(rows):
                 values[value] = None
 
     for group in groups.values():
+        group["product_box_count"] = count_boxes(group.pop("recorded_box_labels"))
         group["box_quantities"] = list(group["box_number"].items())
         for field in ("box_number", "barcode"):
             group[field] = ", ".join(group[field])
@@ -270,6 +273,12 @@ def delivery_box_numbers(db, delivery):
     return [row[0] for row in db.execute(
         "SELECT DISTINCT box_number FROM delivery_lines WHERE delivery=? AND box_number<>'' ORDER BY rowid",
         (delivery,))]
+
+
+def delivery_box_count(db, delivery, declared):
+    labels = (row[0] for row in db.execute(
+        "SELECT box_number FROM delivery_lines WHERE delivery=?", (delivery,)))
+    return count_boxes(labels, declared)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -301,9 +310,11 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/deliveries":
             with sqlite3.connect(self.server.database) as db:
                 db.row_factory = sqlite3.Row
+                db.execute("BEGIN")
                 deliveries = []
                 for row in db.execute("SELECT * FROM deliveries ORDER BY arrival DESC, id DESC"):
-                    deliveries.append(dict(row) | {"box_numbers": delivery_box_numbers(db, row["id"])})
+                    deliveries.append(dict(row) | {"box_numbers": delivery_box_numbers(db, row["id"]),
+                        "box_count": delivery_box_count(db, row["id"], row["boxes"])})
             self.json(200, {"deliveries": deliveries, "backup_path": str(BACKUPS)})
         elif url.path == "/api/activity":
             with sqlite3.connect(self.server.database) as db:
@@ -321,6 +332,7 @@ class Handler(BaseHTTPRequestHandler):
             terms = [key(filters.get(field, [""])[0]) for field in ("name", "colour")]
             with sqlite3.connect(self.server.database) as db:
                 db.row_factory = sqlite3.Row
+                db.execute("BEGIN")
                 rows = db.execute("""
                     SELECT d.id, d.arrival, d.boxes, p.id AS product_id,
                            p.name_key || ' ' || p.model_key || ' ' || p.colour_key AS search_text,
@@ -330,6 +342,10 @@ class Handler(BaseHTTPRequestHandler):
                     WHERE instr(p.name_key, ?) > 0 AND instr(p.colour_key, ?) > 0
                     ORDER BY d.arrival DESC, d.id DESC, p.name_key, p.model_key, p.colour_key, i.rowid
                 """, terms).fetchall()
+                delivery_counts = {
+                    row["id"]: delivery_box_count(db, row["id"], row["boxes"])
+                    for row in db.execute("SELECT id, boxes FROM deliveries")
+                }
             start = filters.get("date_from", [""])[0]
             end = filters.get("date_to", [""])[0]
             try:
@@ -356,6 +372,8 @@ class Handler(BaseHTTPRequestHandler):
                     term in row["search_text"] for term in query
                 )]
             rows = grouped_history(rows)
+            for row in rows:
+                row["delivery_box_count"] = delivery_counts[row["id"]]
             self.json(200, {"rows": rows, "total": sum(row["qty"] for row in rows)})
         else:
             self.json(404, {"error": "Page not found."})
@@ -391,7 +409,9 @@ class Handler(BaseHTTPRequestHandler):
             if not changed:
                 self.json(409, {"error": "This delivery has changed. Reload the page before editing it."})
                 return
-            self.json(200, {"arrival": arrival, "boxes": boxes})
+            with sqlite3.connect(self.server.database) as db:
+                summary = delivery_box_count(db, delivery_id, boxes)
+            self.json(200, {"arrival": arrival, "boxes": boxes, "box_count": summary})
         except (ValueError, UnicodeDecodeError):
             self.json(400, {"error": "Enter a valid arrival date and a positive whole-number box count."})
         except sqlite3.Error:
@@ -433,6 +453,7 @@ class Handler(BaseHTTPRequestHandler):
                            (activity_id,))
                 record = dict(db.execute("SELECT * FROM deliveries WHERE id=?", (delivery,)).fetchone())
                 record["box_numbers"] = delivery_box_numbers(db, delivery)
+                record["box_count"] = delivery_box_count(db, delivery, record["boxes"])
             self.json(200, {"delivery": record, "kind": activity["kind"]})
         except sqlite3.Error:
             self.log_error("Delivery undo failed")
@@ -511,6 +532,9 @@ class Handler(BaseHTTPRequestHandler):
                     """, (delivery, qty, box, barcode, details, *product))
             result = {"items": len(items), "qty": sum(item[3] for item in items.values())}
             if replacement:
+                with sqlite3.connect(self.server.database) as db:
+                    declared = db.execute("SELECT boxes FROM deliveries WHERE id=?", (delivery,)).fetchone()[0]
+                    result["box_count"] = delivery_box_count(db, delivery, declared)
                 result.update(revision=revision + 1, box_numbers=list(dict.fromkeys(
                     identity[3] for identity in items if identity[3])))
             self.json(200 if replacement else 201, result)

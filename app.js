@@ -7,7 +7,7 @@ let searchTimer;
 const selected = new Set();
 const reportColumns = [
     'Select', 'Arrival Date', 'Delivery Boxes', 'Product Model', 'Product Name', 'Colour',
-    'Total QTY', 'Barcode', 'Box Number + Qty in that Box',
+    'Total QTY', 'Barcode', 'Box Number + Qty in that Box', 'Boxes Containing Product',
 ];
 
 function rowKey(row) {
@@ -20,7 +20,7 @@ function reportValues(row, display = false) {
     return [
         display ? date.format(new Date(row.arrival)) : row.arrival,
         quantity(row.boxes), row.model, row.name, row.colour,
-        quantity(row.qty), row.barcode, boxes.join(', '),
+        quantity(row.qty), row.barcode, boxes.join(', '), productBoxText(row.product_box_count),
     ];
 }
 
@@ -104,7 +104,8 @@ function showMoreRows() {
                 } else {
                     cell.textContent = value === '' ? '—' : value;
                 }
-                if (index === 1 || index === 5) cell.className = 'num';
+                if (index === 1 || index === 5 || index === 8) cell.className = 'num';
+                if (index === 8) cell.title = row.product_box_count.issues.join('; ');
             });
             fragment.append(tr);
         }

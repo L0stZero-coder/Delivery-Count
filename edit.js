@@ -122,6 +122,7 @@ async function undoActivity(entry, button) {
                 current.boxes.value = result.delivery.boxes;
             }
             updateBoxList(current.boxList, result.delivery.box_numbers);
+            current.boxSummary.textContent = deliveryBoxText(current.delivery.box_count, current.delivery.boxes);
             filterDeliveries();
         }
         activityMessage.className = 'success';
@@ -154,6 +155,9 @@ async function loadDeliveries() {
             title.append(link);
             const boxList = document.createElement('p');
             updateBoxList(boxList, delivery.box_numbers);
+            const boxSummary = document.createElement('p');
+            boxSummary.className = 'note';
+            boxSummary.textContent = deliveryBoxText(delivery.box_count, delivery.boxes);
             const form = document.createElement('form');
             form.className = 'edit-form';
             const dateLabel = document.createElement('label');
@@ -196,6 +200,7 @@ async function loadDeliveries() {
                     const result = await response.json();
                     if (!response.ok) throw new Error(result.error);
                     Object.assign(delivery, result);
+                    boxSummary.textContent = deliveryBoxText(delivery.box_count, delivery.boxes);
                     filterDeliveries();
                     message.className = 'success';
                     message.textContent = 'Changes saved.';
@@ -246,6 +251,8 @@ async function loadDeliveries() {
                     const result = await response.json();
                     if (!response.ok) throw new Error(result.error);
                     delivery.revision = result.revision;
+                    delivery.box_count = result.box_count;
+                    boxSummary.textContent = deliveryBoxText(delivery.box_count, delivery.boxes);
                     delivery.box_numbers = result.box_numbers;
                     updateBoxList(boxList, result.box_numbers);
                     loadActivity();
@@ -261,8 +268,8 @@ async function loadDeliveries() {
                     replace.disabled = fileInput.disabled = false;
                 }
             });
-            card.append(title, boxList, form, message, explanation, replacementForm, replacementMessage);
-            deliveryCards.push({ delivery, card, arrival, boxes, boxList });
+            card.append(title, boxList, boxSummary, form, message, explanation, replacementForm, replacementMessage);
+            deliveryCards.push({ delivery, card, arrival, boxes, boxList, boxSummary });
             container.append(card);
         }
         deliveriesLoaded = true;

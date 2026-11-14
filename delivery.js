@@ -1,7 +1,7 @@
 const deliveryId = new URLSearchParams(location.search).get('id');
 const detailStatus = document.getElementById('status');
 const formatNumber = new Intl.NumberFormat('en-GB');
-const headings = ['Arrival Date', 'Delivery Boxes', 'Product Model', 'Product Name', 'Colour', 'Total QTY', 'Barcode', 'Box Number + Qty in that Box'];
+const headings = ['Arrival Date', 'Delivery Boxes', 'Product Model', 'Product Name', 'Colour', 'Total QTY', 'Barcode', 'Box Number + Qty in that Box', 'Boxes Containing Product'];
 
 async function loadDelivery() {
     try {
@@ -18,16 +18,17 @@ async function loadDelivery() {
         document.getElementById('title').textContent = 'Delivery #' + delivery.id;
         const arrival = new Intl.DateTimeFormat('en-GB', {dateStyle:'long', timeZone:'UTC'}).format(new Date(delivery.arrival));
         document.getElementById('summary').textContent = arrival + ' · ' + formatNumber.format(delivery.boxes) + ' delivery boxes · ' + formatNumber.format(total) + ' units';
+        document.getElementById('box-summary').textContent = deliveryBoxText(delivery.box_count, delivery.boxes);
         const report = rows.map((row) => [
             row.arrival, row.boxes, row.model, row.name, row.colour, row.qty, row.barcode,
-            row.box_quantities.map(([box, qty]) => box + ' (' + qty + ')').join(', '),
+            row.box_quantities.map(([box, qty]) => box + ' (' + qty + ')').join(', '), productBoxText(row.product_box_count),
         ]);
         for (const values of report) {
             const tr = document.createElement('tr');
             values.slice(2).forEach((value, index) => {
                 const cell = tr.insertCell();
                 cell.textContent = index === 3 ? formatNumber.format(value) : value || '—';
-                if (index === 3) cell.className = 'num';
+                if (index === 3 || index === 6) cell.className = 'num';
             });
             document.getElementById('detail-rows').append(tr);
         }
