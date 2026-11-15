@@ -46,6 +46,12 @@
 <label>Search products<input id="name-filter" type="search" placeholder="e.g. Duo 6D tempered glass black"></label>
 <label>Colour<input id="colour-filter" type="search" placeholder="e.g. Black"></label>
 <label>Delivery Boxes<input id="boxes-filter" type="number" min="1" step="1" placeholder="e.g. 69"></label>
+<label>Status<select id="status-filter">
+<option value="">All statuses</option>
+<option value="arrived">Arrived</option>
+<option value="delayed">Delayed</option>
+<option value="expected">Expected</option>
+</select></label>
 <div class="range-control">
 <span class="range-label">Arrival date range</span>
 <button id="range-toggle" class="range-toggle" type="button" aria-expanded="false" aria-controls="range-panel">Select dates</button>

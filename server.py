@@ -360,6 +360,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             rows = [row for row in rows if (not start or row["arrival"] >= start)
                     and (not end or row["arrival"] <= end)]
+            status = filters.get("status", [""])[0]
+            if status:
+                rows = [row for row in rows if row["status"] == status]
             delivery_id = filters.get("delivery", [""])[0]
             if delivery_id:
                 rows = [row for row in rows if str(row["id"]) == delivery_id]
@@ -397,21 +400,28 @@ class Handler(BaseHTTPRequestHandler):
             previous_arrival = str(values.get("previous_arrival", ""))
             previous_boxes = positive_int(values.get("previous_boxes", ""), "Previous delivery boxes")
             with sqlite3.connect(self.server.database) as db:
-                changed = db.execute(
-                    "UPDATE deliveries SET arrival=?, boxes=? WHERE id=? AND arrival=? AND boxes=?",
-                    (arrival, boxes, delivery_id, previous_arrival, previous_boxes),
-                ).rowcount
-                if changed and (arrival, boxes) != (previous_arrival, previous_boxes):
+                db.execute("BEGIN IMMEDIATE")
+                previous = db.execute(
+                    "SELECT status FROM deliveries WHERE id=? AND arrival=? AND boxes=?",
+                    (delivery_id, previous_arrival, previous_boxes),
+                ).fetchone()
+                if previous is None:
+                    self.json(409, {"error": "This delivery has changed. Reload the page before editing it."})
+                    return
+                old_status = previous[0]
+                status = old_status
+                if arrival != previous_arrival and arrival > date.today().isoformat():
+                    status = "expected"
+                if (arrival, boxes) != (previous_arrival, previous_boxes):
+                    db.execute("UPDATE deliveries SET arrival=?, boxes=?, status=? WHERE id=?",
+                               (arrival, boxes, status, delivery_id))
                     db.execute("""
-                        INSERT INTO delivery_activity(delivery, kind, old_arrival, old_boxes, new_arrival, new_boxes)
-                        VALUES (?, 'edit', ?, ?, ?, ?)
-                    """, (delivery_id, previous_arrival, previous_boxes, arrival, boxes))
-            if not changed:
-                self.json(409, {"error": "This delivery has changed. Reload the page before editing it."})
-                return
-            with sqlite3.connect(self.server.database) as db:
+                        INSERT INTO delivery_activity(delivery, kind, old_arrival, old_boxes,
+                            new_arrival, new_boxes, old_status, new_status)
+                        VALUES (?, 'edit', ?, ?, ?, ?, ?, ?)
+                    """, (delivery_id, previous_arrival, previous_boxes, arrival, boxes, old_status, status))
                 summary = delivery_box_count(db, delivery_id, boxes)
-            self.json(200, {"arrival": arrival, "boxes": boxes, "box_count": summary})
+            self.json(200, {"arrival": arrival, "boxes": boxes, "status": status, "box_count": summary})
         except (ValueError, UnicodeDecodeError):
             self.json(400, {"error": "Enter a valid arrival date and a positive whole-number box count."})
         except sqlite3.Error:
@@ -442,8 +452,8 @@ class Handler(BaseHTTPRequestHandler):
                     db.execute("UPDATE deliveries SET arrival=?, status=? WHERE id=?",
                                (activity["old_arrival"], activity["old_status"], delivery))
                 elif activity["kind"] == "edit":
-                    db.execute("UPDATE deliveries SET arrival=?, boxes=? WHERE id=?",
-                               (activity["old_arrival"], activity["old_boxes"], delivery))
+                    db.execute("UPDATE deliveries SET arrival=?, boxes=?, status=COALESCE(?, status) WHERE id=?",
+                               (activity["old_arrival"], activity["old_boxes"], activity["old_status"], delivery))
                 else:
                     db.execute("DELETE FROM delivery_lines WHERE delivery=?", (delivery,))
                     db.execute("""

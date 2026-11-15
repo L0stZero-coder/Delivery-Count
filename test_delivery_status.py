@@ -1,4 +1,5 @@
 import json
+import os
 import socket
 import sqlite3
 import subprocess
@@ -38,7 +39,9 @@ class DeliveryStatusTests(unittest.TestCase):
                     with error:
                         return error.code, json.load(error)
             def start():
-                process = subprocess.Popen([sys.executable, 'server.py', '--host', '127.0.0.1', '--port', str(port), '--database', str(database)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                # Launch Python directly so Windows termination also closes SQLite handles.
+                env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
+                process = subprocess.Popen([sys._base_executable, 'server.py', '--host', '127.0.0.1', '--port', str(port), '--database', str(database)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
                 for _ in range(40):
                     try:
                         request('/api/deliveries')
@@ -75,6 +78,20 @@ class DeliveryStatusTests(unittest.TestCase):
                 self.assertEqual(request(f"/api/activity/{activity['id']}/undo", {})[0], 200)
                 row = request('/api/history')[1]['rows'][0]
                 self.assertEqual((row['status'], row['arrival']), ('delayed', future))
+                self.assertEqual(len(request('/api/history?status=delayed')[1]['rows']), 1)
+                self.assertEqual(request('/api/history?status=arrived')[1]['rows'], [])
+                new_date = (date.today() + timedelta(days=5)).isoformat()
+                edit = dict(arrival=new_date, boxes=80, previous_arrival=future, previous_boxes=80)
+                self.assertEqual(request('/api/deliveries/2/edit', edit)[1]['status'], 'expected')
+                row = request('/api/history?status=expected')[1]['rows'][0]
+                self.assertEqual(row['arrival'], new_date)
+                self.assertEqual(request('/api/history?status=delayed')[1]['rows'], [])
+                activity = request('/api/activity')[1]['activity'][0]
+                undone = request(f"/api/activity/{activity['id']}/undo", {})[1]['delivery']
+                self.assertEqual((undone['status'], undone['arrival']), ('delayed', future))
+
+                edit.update(boxes=69, previous_arrival=today, previous_boxes=69)
+                self.assertEqual(request('/api/deliveries/1/edit', edit)[1]['status'], 'expected')
             finally:
                 process.terminate(); process.wait()
 

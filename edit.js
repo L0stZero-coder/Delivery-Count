@@ -53,6 +53,9 @@ function describeActivity(entry) {
             + ' → ' + entry.new_qty.toLocaleString('en-GB') + ' units';
     }
     const changes = [];
+    if (entry.old_status && entry.old_status !== entry.new_status) {
+        changes.push('Status ' + entry.old_status + ' → ' + entry.new_status);
+    }
     if (entry.old_arrival !== entry.new_arrival) {
         changes.push('Arrival date ' + rangeDisplay(entry.old_arrival) + ' → ' + rangeDisplay(entry.new_arrival));
     }

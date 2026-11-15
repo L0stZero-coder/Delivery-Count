@@ -133,6 +133,7 @@ async function showHistory() {
         q: byId('name-filter').value,
         colour: byId('colour-filter').value,
         boxes: byId('boxes-filter').value,
+        status: byId('status-filter').value,
         date_from: byId('date-from').value,
         date_to: byId('date-to').value,
     });
@@ -168,12 +169,14 @@ for (const id of ['name-filter', 'colour-filter', 'boxes-filter']) {
     });
 }
 
+byId('status-filter').addEventListener('change', showHistory);
 document.addEventListener('arrival-range-change', showHistory);
 
 byId('clear').addEventListener('click', () => {
     byId('name-filter').value = '';
     byId('colour-filter').value = '';
     byId('boxes-filter').value = '';
+    byId('status-filter').value = '';
     resetDateRange();
     clearTimeout(searchTimer);
     showHistory();
