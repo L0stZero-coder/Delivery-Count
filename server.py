@@ -49,6 +49,12 @@ def normalize_model(value):
         model = "iPhone " + model
     if model.startswith("iPhone "):
         model = re.sub(r"\b(\d+)\.0+\b", r"\1", model)
+    model = re.sub(r"^(?:samsung\s+galaxy|samsung|galaxy|sam)(?=\b|[a-z]?\d)\s*",
+                   "Samsung ", model, flags=re.I)
+    if re.match(r"^s\s*\d", model, flags=re.I):
+        model = "Samsung " + model
+    if model.startswith("Samsung "):
+        model = re.sub(r"\bs\s*(?=\d)", "S", model, flags=re.I)
     return model.strip()
 
 
