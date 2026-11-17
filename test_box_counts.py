@@ -9,6 +9,8 @@ class BoxCountingTests(unittest.TestCase):
             ("Ki6", 1), ("GG17, GG18; GG19", 3), ("KE1-KE5", 5),
             ("R197–206", 10), ("ke1—KE5, KE3, ke5, KE6", 6),
             (" Ki 6 , ki6, KI006 ", 1), ("1-3", 3),
+            ("G1~G3", 3), ("R197~206", 10), ("1~3", 3),
+            ("g1 ~ G3, G2-G4", 4), ("G1～G3", 3),
         ]:
             with self.subTest(label=label):
                 result = count_boxes([label])

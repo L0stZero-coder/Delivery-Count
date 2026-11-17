@@ -17,7 +17,7 @@ def parse_boxes(value):
         token = token.strip()
         if not token:
             continue
-        compact = re.sub(r"\s+", "", token).upper().replace("–", "-").replace("—", "-")
+        compact = re.sub(r"\s+", "", token).upper().replace("–", "-").replace("—", "-").replace("~", "-")
         match = re.fullmatch(r"([A-Z]*)([0-9]{1,9})(?:-([A-Z]*)([0-9]{1,9}))?", compact)
         if not match:
             issues.append("Unrecognised box label: " + token)
