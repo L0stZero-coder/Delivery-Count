@@ -291,11 +291,13 @@ function showDeliverySummary(deliveries, monthlyUnits) {
     const end = rangeIso(endDate);
     const month = start.slice(0, 7);
     const pending = deliveries.filter((delivery) => delivery.status !== 'arrived');
+    const monthlyArrivals = deliveries.filter((delivery) => delivery.status === 'arrived' && delivery.arrival.startsWith(month));
     const values = {
         upcoming: pending.filter((delivery) => delivery.arrival >= start && delivery.arrival <= end).length,
         overdue: pending.filter((delivery) => delivery.arrival < start).length,
         delayed: deliveries.filter((delivery) => delivery.status === 'delayed').length,
-        arrived: deliveries.filter((delivery) => delivery.status === 'arrived' && delivery.arrival.startsWith(month)).length,
+        arrived: monthlyArrivals.length,
+        boxes: monthlyArrivals.reduce((total, delivery) => total + delivery.boxes, 0),
         units: monthlyUnits,
     };
     for (const [name, value] of Object.entries(values)) {
@@ -325,7 +327,7 @@ async function showDeliverySchedule() {
     } catch {
         if (!request.signal.aborted) {
             status.textContent = 'Could not refresh the summary and schedule. Retrying automatically.';
-            for (const name of ['upcoming', 'overdue', 'delayed', 'arrived', 'units']) {
+            for (const name of ['upcoming', 'overdue', 'delayed', 'arrived', 'boxes', 'units']) {
                 byId('summary-' + name).textContent = '—';
             }
             document.querySelector('.delivery-summary').setAttribute('aria-busy', 'false');
