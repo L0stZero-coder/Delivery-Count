@@ -283,6 +283,27 @@ byId('confirm-delayed').addEventListener('click', () => {
     if (input.reportValidity()) saveDeliveryStatus('delayed', input.value);
 });
 
+function showDeliverySummary(deliveries, monthlyUnits) {
+    const today = new Date();
+    const start = rangeIso(today);
+    const endDate = new Date(today);
+    endDate.setDate(endDate.getDate() + 6);
+    const end = rangeIso(endDate);
+    const month = start.slice(0, 7);
+    const pending = deliveries.filter((delivery) => delivery.status !== 'arrived');
+    const values = {
+        upcoming: pending.filter((delivery) => delivery.arrival >= start && delivery.arrival <= end).length,
+        overdue: pending.filter((delivery) => delivery.arrival < start).length,
+        delayed: deliveries.filter((delivery) => delivery.status === 'delayed').length,
+        arrived: deliveries.filter((delivery) => delivery.status === 'arrived' && delivery.arrival.startsWith(month)).length,
+        units: monthlyUnits,
+    };
+    for (const [name, value] of Object.entries(values)) {
+        byId('summary-' + name).textContent = number.format(value);
+    }
+    document.querySelector('.delivery-summary').setAttribute('aria-busy', 'false');
+}
+
 let scheduleRequest;
 async function showDeliverySchedule() {
     scheduleRequest?.abort();
@@ -292,8 +313,9 @@ async function showDeliverySchedule() {
     try {
         const response = await fetch('/api/deliveries', { signal: request.signal });
         if (!response.ok) throw new Error();
-        const { deliveries } = await response.json();
+        const { deliveries, monthly_arrived_units } = await response.json();
         if (request.signal.aborted) return;
+        showDeliverySummary(deliveries, monthly_arrived_units);
         const arrived = deliveries.filter((delivery) => delivery.status === 'arrived').slice(0, 8);
         const expected = deliveries.filter((delivery) => delivery.status !== 'arrived')
             .sort((a, b) => a.arrival.localeCompare(b.arrival) || a.id - b.id).slice(0, 8);
@@ -301,7 +323,13 @@ async function showDeliverySchedule() {
         renderScheduleList('expected-deliveries', expected, 'No upcoming deliveries recorded.');
         status.textContent = '';
     } catch {
-        if (!request.signal.aborted) status.textContent = 'Could not refresh the schedule. Retrying automatically.';
+        if (!request.signal.aborted) {
+            status.textContent = 'Could not refresh the summary and schedule. Retrying automatically.';
+            for (const name of ['upcoming', 'overdue', 'delayed', 'arrived', 'units']) {
+                byId('summary-' + name).textContent = '—';
+            }
+            document.querySelector('.delivery-summary').setAttribute('aria-busy', 'false');
+        }
     }
 }
 

@@ -317,11 +317,16 @@ class Handler(BaseHTTPRequestHandler):
             with sqlite3.connect(self.server.database) as db:
                 db.row_factory = sqlite3.Row
                 db.execute("BEGIN")
+                monthly_units = db.execute("""
+                    SELECT COALESCE(SUM(i.qty), 0) FROM delivery_lines i
+                    JOIN deliveries d ON d.id=i.delivery
+                    WHERE d.status='arrived' AND substr(d.arrival, 1, 7)=?
+                """, (date.today().isoformat()[:7],)).fetchone()[0]
                 deliveries = []
                 for row in db.execute("SELECT * FROM deliveries ORDER BY arrival DESC, id DESC"):
                     deliveries.append(dict(row) | {"box_numbers": delivery_box_numbers(db, row["id"]),
                         "box_count": delivery_box_count(db, row["id"], row["boxes"])})
-            self.json(200, {"deliveries": deliveries, "backup_path": str(BACKUPS)})
+            self.json(200, {"deliveries": deliveries, "backup_path": str(BACKUPS), "monthly_arrived_units": monthly_units})
         elif url.path == "/api/activity":
             with sqlite3.connect(self.server.database) as db:
                 db.row_factory = sqlite3.Row
